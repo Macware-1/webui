@@ -184,6 +184,63 @@
           </div>
 
         </div>
+
+        <!-- ── Bootloader / OTA card ──────────────────────────────────────── -->
+        <div class="boot-card">
+          <div class="boot-card-title">Firmware Update</div>
+
+          <!-- idle -->
+          <template v-if="bootState === 'idle'">
+            <p class="boot-desc">
+              Reboot the device into bootloader mode to upload a new firmware
+              image via the OTA web interface at <span class="boot-url">192.168.1.100</span>.
+            </p>
+            <button class="btn btn-danger boot-btn" @click="bootState = 'confirming'">
+              ↩ Enter Bootloader Mode
+            </button>
+          </template>
+
+          <!-- confirming -->
+          <template v-else-if="bootState === 'confirming'">
+            <p class="boot-warn">
+              ⚠ The device will reboot immediately. The Ethernet connection will
+              drop and the app will be unreachable until the bootloader starts.
+            </p>
+            <div class="boot-row">
+              <button class="btn btn-danger  boot-btn-half" @click="confirmBootloader">Confirm reboot</button>
+              <button class="btn btn-neutral boot-btn-half" @click="bootState = 'idle'">Cancel</button>
+            </div>
+          </template>
+
+          <!-- sending -->
+          <template v-else-if="bootState === 'sending'">
+            <div class="boot-spinner-row">
+              <div class="boot-spinner"></div>
+              <span class="boot-sending-txt">Sending reset command…</span>
+            </div>
+          </template>
+
+          <!-- done -->
+          <template v-else-if="bootState === 'done'">
+            <p class="boot-ok">✓ Device is rebooting into bootloader mode.</p>
+            <p class="boot-desc" style="margin-top:6px">
+              Connect to
+              <a class="boot-link" href="http://192.168.1.100" target="_blank">
+                http://192.168.1.100
+              </a>
+              to upload the <code>.fwu</code> package.
+            </p>
+            <button class="btn btn-neutral boot-btn" style="margin-top:12px"
+                    @click="bootState = 'idle'">Dismiss</button>
+          </template>
+
+          <!-- error -->
+          <template v-else-if="bootState === 'error'">
+            <p class="boot-err">✕ {{ bootMsg }}</p>
+            <button class="btn btn-neutral boot-btn" style="margin-top:10px"
+                    @click="bootState = 'idle'">Retry</button>
+          </template>
+        </div>
       </section>
 
     </main>
@@ -224,6 +281,9 @@ const dtc      = ref([])
 const nodes    = ref([])
 const throttle = ref(0)
 const tx = reactive({ pgn: '', data: '' })
+
+const bootState = ref('idle')   // idle | confirming | sending | done | error
+const bootMsg   = ref('')
 
 // ── Smoothing (exponential moving average) ────────────────────────────────────
 setInterval(() => {
@@ -289,6 +349,22 @@ function formatUptime(s) {
 
 function send(obj) { console.log('J1939 TX:', obj) }
 function sendThrottle() { send({ type: 'control', throttle: throttle.value }) }
+
+async function confirmBootloader() {
+  bootState.value = 'sending'
+  try {
+    await axios.post(`${MCU}/api/bootloader`, {}, { timeout: 2000 })
+    bootState.value = 'done'
+  } catch (e) {
+    // A network error here likely means the device already reset — treat as success.
+    if (!e.response) {
+      bootState.value = 'done'
+    } else {
+      bootState.value = 'error'
+      bootMsg.value = e.message || 'Unknown error'
+    }
+  }
+}
 
 // ── Components ────────────────────────────────────────────────────────────────
 //
@@ -792,4 +868,65 @@ body {
 }
 .dev-online { background: rgba(16,185,129,0.1);  color: #34d399; }
 .dev-offline { background: rgba(239,68,68,0.1);  color: #f87171; }
+
+/* ── Bootloader card ──────────────────────────────────────────────────────── */
+.boot-card {
+  margin-top: 20px;
+  background: var(--card);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
+.boot-card-title {
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.boot-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.boot-url   { color: var(--text); font-family: monospace; font-weight: 600; }
+.boot-warn  { font-size: 13px; color: #fbbf24; line-height: 1.6; }
+.boot-ok    { font-size: 14px; color: #34d399; font-weight: 600; }
+.boot-err   { font-size: 13px; color: #f87171; }
+.boot-link  { color: var(--primary); text-decoration: none; font-family: monospace; font-weight: 600; }
+.boot-link:hover { text-decoration: underline; }
+
+.boot-btn       { margin-top: 4px; }
+.boot-btn-half  { flex: 1; }
+.boot-row       { display: flex; gap: 10px; }
+
+.btn-neutral {
+  background: var(--dim);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+.btn-neutral:hover { color: var(--text); }
+
+.boot-spinner-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 0;
+}
+.boot-spinner {
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.boot-sending-txt { font-size: 13px; color: var(--muted); }
+
+code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--dim);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text);
+}
 </style>
