@@ -182,10 +182,33 @@
         <div class="info-grid">
 
           <div class="info-card">
-            <div class="info-card-title">Network</div>
+            <div class="info-card-title">Network (Live)</div>
             <InfoRow label="IP Address"  :value="system.ip"/>
             <InfoRow label="MAC Address" :value="system.mac"/>
             <InfoRow label="Gateway"     :value="system.gateway"/>
+          </div>
+
+          <div class="info-card" style="grid-column: 1 / -1">
+            <div class="info-card-title">Network Configuration</div>
+            <div class="cfg-grid" style="margin-top:10px">
+              <div class="rule-field">
+                <label class="field-label">ETH IP</label>
+                <input v-model="cfg.board.eth_ip"   class="text-input mono" placeholder="10.104.3.64"/>
+              </div>
+              <div class="rule-field">
+                <label class="field-label">Subnet Mask</label>
+                <input v-model="cfg.board.eth_mask" class="text-input mono" placeholder="255.255.255.0"/>
+              </div>
+              <div class="rule-field">
+                <label class="field-label">Gateway</label>
+                <input v-model="cfg.board.eth_gw"   class="text-input mono" placeholder="10.104.3.1"/>
+              </div>
+              <div class="rule-field">
+                <label class="field-label">USB IP</label>
+                <input v-model="cfg.board.usb_ip"   class="text-input mono" placeholder="192.168.7.64"/>
+              </div>
+            </div>
+            <p class="boot-desc" style="margin-top:8px">Changes take effect after <strong>Save &amp; Apply Config</strong>.</p>
           </div>
 
           <div class="info-card">
@@ -293,7 +316,7 @@
       <section v-if="page === 'Logging'" class="content-panel">
         <p class="mode-desc" style="margin-bottom:20px">
           Click a CAN channel block to configure its logging ID and output target.
-          Arrows show active logging paths. WiFi and Bluetooth are not yet supported.
+          Arrows show active logging paths. Bluetooth is not yet supported.
         </p>
 
         <!-- Block diagram (pure SVG) -->
@@ -305,6 +328,9 @@
               </marker>
               <marker id="ah-off" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
                 <polygon points="0 0, 10 4, 0 8" fill="#243549"/>
+              </marker>
+              <marker id="ah-usb" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                <polygon points="0 0, 10 4, 0 8" fill="#a78bfa"/>
               </marker>
             </defs>
 
@@ -346,6 +372,20 @@
                   :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? '6,4' : '4,5'"
                   :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? 'url(#ah-on)' : 'url(#ah-off)'"/>
 
+            <!-- Arrow: Ch1 → USB ECM -->
+            <line x1="215" y1="128" x2="468" y2="197"
+                  :stroke="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? '#a78bfa' : '#243549'"
+                  stroke-width="2.5"
+                  :stroke-dasharray="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? '6,4' : '4,5'"
+                  :marker-end="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? 'url(#ah-usb)' : 'url(#ah-off)'"/>
+
+            <!-- Arrow: Ch2 → USB ECM -->
+            <line x1="577" y1="128" x2="558" y2="197"
+                  :stroke="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? '#a78bfa' : '#243549'"
+                  stroke-width="2.5"
+                  :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? '6,4' : '4,5'"
+                  :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? 'url(#ah-usb)' : 'url(#ah-off)'"/>
+
             <!-- Ethernet block -->
             <rect x="175" y="197" width="260" height="100" rx="12"
                   :fill="system.link_up ? '#081a10' : '#1a0909'"
@@ -358,13 +398,14 @@
               {{ system.link_up ? 'Connected' : 'Disconnected' }}
             </text>
 
-            <!-- WiFi block (disabled / coming soon) -->
-            <g opacity="0.38">
-              <rect x="458" y="197" width="110" height="100" rx="12" fill="#101e33" stroke="#1b2d47" stroke-width="1.5"/>
-              <text x="513" y="244" text-anchor="middle" font-size="28">📶</text>
-              <text x="513" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">WiFi</text>
-              <text x="513" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">Coming soon</text>
-            </g>
+            <!-- USB ECM block -->
+            <rect x="458" y="197" width="110" height="100" rx="12"
+                  :fill="(cfg.logging.ch1.enabled && cfg.logging.ch1.target===1) || (cfg.logging.ch2.enabled && cfg.logging.ch2.target===1) ? '#1a0f2e' : '#101e33'"
+                  :stroke="(cfg.logging.ch1.enabled && cfg.logging.ch1.target===1) || (cfg.logging.ch2.enabled && cfg.logging.ch2.target===1) ? '#a78bfa' : '#1b2d47'"
+                  stroke-width="2"/>
+            <text x="513" y="244" text-anchor="middle" font-size="28">🔌</text>
+            <text x="513" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">USB ECM</text>
+            <text x="513" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">192.168.7.x</text>
 
             <!-- Bluetooth block (disabled / coming soon) -->
             <g opacity="0.38">
@@ -390,10 +431,10 @@
         <div class="cfg-card">
           <div class="info-card-title">Nominal Speed Preset (PLL2Q = 80 MHz)</div>
           <div class="preset-row">
-            <button class="preset-btn" @click="applyNomPreset(8,63,16,4)">125 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(4,63,16,4)">250 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(2,63,16,4)">500 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(1,63,16,4)">1 Mbps</button>
+            <button class="preset-btn" @click="applyNomPreset(8,59,20,20)">125 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(4,59,20,20)">250 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(2,59,20,20)">500 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(1,59,20,20)">1 Mbps</button>
           </div>
           <div class="info-card-title" style="margin-top:16px">Data Speed Preset (CAN FD)</div>
           <div class="preset-row">
@@ -511,7 +552,7 @@
           <!-- CAN ID -->
           <div class="cfg-row">
             <label class="cfg-label">CAN ID (hex)</label>
-            <input v-model="replay.id" class="text-input mono"
+            <input v-model="inject.id" class="text-input mono"
                    placeholder="0x123" maxlength="12" spellcheck="false"/>
           </div>
 
@@ -520,19 +561,19 @@
             <label class="cfg-label">Frame Type</label>
             <div class="radio-row">
               <label class="radio-opt">
-                <input type="radio" v-model="replay.fd" :value="false"/> Classic CAN
+                <input type="radio" v-model="inject.fd" :value="false"/> Classic CAN
               </label>
               <label class="radio-opt" style="margin-left:16px">
-                <input type="radio" v-model="replay.fd" :value="true"/> CAN FD
+                <input type="radio" v-model="inject.fd" :value="true"/> CAN FD
               </label>
             </div>
           </div>
 
           <!-- BRS (only relevant for FD) -->
-          <div class="cfg-row" v-if="replay.fd">
+          <div class="cfg-row" v-if="inject.fd">
             <label class="cfg-label">Bit-Rate Switch</label>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="replay.brs"/>
+              <input type="checkbox" v-model="inject.brs"/>
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -540,34 +581,34 @@
           <!-- Data -->
           <div class="cfg-row">
             <label class="cfg-label">Data (hex bytes)</label>
-            <input v-model="replay.data" class="text-input mono"
-                   :placeholder="replay.fd ? 'up to 64 bytes, e.g. 0102030405060708' : 'up to 8 bytes, e.g. 0102030405060708'"
+            <input v-model="inject.data" class="text-input mono"
+                   :placeholder="inject.fd ? 'up to 64 bytes, e.g. 0102030405060708' : 'up to 8 bytes, e.g. 0102030405060708'"
                    maxlength="128" spellcheck="false"/>
           </div>
 
           <!-- DLC indicator -->
           <div class="cfg-row">
             <label class="cfg-label">DLC (auto)</label>
-            <span class="mono" style="color:var(--accent)">{{ replayDlc }}</span>
+            <span class="mono" style="color:var(--accent)">{{ injectDlc }}</span>
           </div>
 
           <!-- Send button -->
           <div style="margin-top:16px">
             <button class="btn btn-primary" @click="sendCanFrame"
-                    :disabled="replay.sending">
-              {{ replay.sending ? 'Sending…' : 'Send Frame' }}
+                    :disabled="inject.sending">
+              {{ inject.sending ? 'Sending…' : 'Send Frame' }}
             </button>
           </div>
 
           <!-- Result -->
-          <div v-if="replay.result" :class="['replay-result', replay.ok ? 'replay-ok' : 'replay-err']"
+          <div v-if="inject.result" :class="['inject-result', inject.ok ? 'inject-ok' : 'inject-err']"
                style="margin-top:12px">
-            {{ replay.result }}
+            {{ inject.result }}
           </div>
 
         </div>
 
-        <!-- UDP replay spec -->
+        <!-- UDP inject spec -->
         <div class="cfg-card" style="max-width:540px;margin-top:16px">
           <div class="info-card-title">UDP Injection (port 4000)</div>
           <p class="boot-desc">
@@ -590,17 +631,6 @@
 
       <!-- FILTERING / CONFIG ─────────────────────────────────────────── -->
       <section v-if="page === 'Filtering'" class="content-panel">
-
-        <!-- Network config -->
-        <div class="cfg-card">
-          <div class="info-card-title">Network Configuration</div>
-          <div class="cfg-grid">
-            <CfgField label="ETH IP"      v-model="cfg.board.eth_ip"   placeholder="10.104.3.64"/>
-            <CfgField label="Subnet Mask" v-model="cfg.board.eth_mask" placeholder="255.255.255.0"/>
-            <CfgField label="Gateway"     v-model="cfg.board.eth_gw"   placeholder="10.104.3.1"/>
-            <CfgField label="USB IP"      v-model="cfg.board.usb_ip"   placeholder="192.168.7.1"/>
-          </div>
-        </div>
 
         <!-- CAN config -->
         <div class="cfg-card">
@@ -713,10 +743,10 @@
             <span class="target-icon">🌐</span>
             <span class="target-name">Ethernet</span>
           </button>
-          <button class="target-btn target-disabled" disabled title="Coming soon">
-            <span class="target-icon">📶</span>
-            <span class="target-name">WiFi</span>
-            <span class="target-soon">Soon</span>
+          <button :class="['target-btn', { 'target-active': popupEdit.target === 1 }]"
+                  @click="popupEdit.target = 1">
+            <span class="target-icon">🔌</span>
+            <span class="target-name">USB ECM</span>
           </button>
           <button class="target-btn target-disabled" disabled title="Coming soon">
             <span class="target-icon">🔷</span>
@@ -779,12 +809,12 @@ const bootState = ref('idle')
 const bootMsg   = ref('')
 
 // ── CAN Replay state ──────────────────────────────────────────────────────────
-const replay = reactive({ id: '0x123', data: '0102030405060708', fd: false, brs: false, sending: false, result: '', ok: false })
+const inject = reactive({ id: '0x123', data: '0102030405060708', fd: false, brs: false, sending: false, result: '', ok: false })
 
-const replayDlc = computed(() => {
-  const hex = replay.data.replace(/\s/g, '')
+const injectDlc = computed(() => {
+  const hex = inject.data.replace(/\s/g, '')
   const byteCount = Math.floor(hex.length / 2)
-  const maxBytes  = replay.fd ? 64 : 8
+  const maxBytes  = inject.fd ? 64 : 8
   const clamped   = Math.min(byteCount, maxBytes)
   const lenTab    = [0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64]
   let dlc = 0
@@ -793,23 +823,23 @@ const replayDlc = computed(() => {
 })
 
 async function sendCanFrame() {
-  replay.sending = true
-  replay.result  = ''
+  inject.sending = true
+  inject.result  = ''
   try {
-    const body = JSON.stringify({ id: replay.id, data: replay.data.replace(/\s/g,''), fd: replay.fd, brs: replay.brs })
+    const body = JSON.stringify({ id: inject.id, data: inject.data.replace(/\s/g,''), fd: inject.fd, brs: inject.brs })
     const r = await fetch(`${MCU}/api/send/can`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body
     })
     const j = await r.json()
-    replay.ok     = j.status === 'ok'
-    replay.result = replay.ok ? `Sent (${j.dlc} bytes)` : `Error: ${j.msg}`
+    inject.ok     = j.status === 'ok'
+    inject.result = inject.ok ? `Sent (${j.dlc} bytes)` : `Error: ${j.msg}`
   } catch (e) {
-    replay.ok     = false
-    replay.result = `Network error: ${e.message}`
+    inject.ok     = false
+    inject.result = `Network error: ${e.message}`
   } finally {
-    replay.sending = false
+    inject.sending = false
   }
 }
 
@@ -823,9 +853,9 @@ function makeRule() {
            remap_id_hex: '00000000', rpayload_hex: '0000000000000000', rdlc: 0 }
 }
 const cfg = reactive({
-  board: { eth_ip: '10.104.3.64', eth_mask: '255.255.255.0', eth_gw: '10.104.3.1', usb_ip: '192.168.7.1', ptp_enable: 0 },
+  board: { eth_ip: '10.104.3.64', eth_mask: '255.255.255.0', eth_gw: '10.104.3.1', usb_ip: '192.168.7.64', ptp_enable: 0 },
   can:   { j1939: 0, dlc: 8, id_hex: '00000000',
-           nbrp: 4, ntseg1: 63, ntseg2: 16, nsjw: 4,
+           nbrp: 2, ntseg1: 59, ntseg2: 20, nsjw: 20,
            dbrp: 2, dtseg1: 15, dtseg2: 4,  dsjw: 4,
            fd_mode: 1, brs: 1 },
   logging: {
@@ -1153,12 +1183,12 @@ function applyDefaults() {
   cfg.board.eth_ip     = '10.104.3.64'
   cfg.board.eth_mask   = '255.255.255.0'
   cfg.board.eth_gw     = '10.104.3.1'
-  cfg.board.usb_ip     = '192.168.7.1'
+  cfg.board.usb_ip     = '192.168.7.64'
   cfg.board.ptp_enable = 0
   cfg.can.j1939   = 0
   cfg.can.dlc     = 8
   cfg.can.id_hex  = '00000000'
-  cfg.can.nbrp    = 4;  cfg.can.ntseg1 = 63; cfg.can.ntseg2 = 16; cfg.can.nsjw = 4
+  cfg.can.nbrp    = 2;  cfg.can.ntseg1 = 59; cfg.can.ntseg2 = 20; cfg.can.nsjw = 20
   cfg.can.dbrp    = 2;  cfg.can.dtseg1 = 15; cfg.can.dtseg2 = 4;  cfg.can.dsjw = 4
   cfg.can.fd_mode = 1;  cfg.can.brs    = 1
   cfg.usb.usbmode = 0
@@ -1703,9 +1733,9 @@ body {
 .boot-warn  { font-size: 13px; color: #fbbf24; line-height: 1.6; }
 .boot-ok    { font-size: 14px; color: #34d399; font-weight: 600; }
 .boot-err   { font-size: 13px; color: #f87171; }
-.replay-result { font-size: 14px; font-weight: 600; padding: 8px 12px; border-radius: 6px; }
-.replay-ok     { color: #34d399; background: rgba(52,211,153,.1); }
-.replay-err    { color: #f87171; background: rgba(248,113,113,.1); }
+.inject-result { font-size: 14px; font-weight: 600; padding: 8px 12px; border-radius: 6px; }
+.inject-ok     { color: #34d399; background: rgba(52,211,153,.1); }
+.inject-err    { color: #f87171; background: rgba(248,113,113,.1); }
 .radio-row     { display: flex; align-items: center; gap: 8px; }
 .radio-opt     { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); cursor: pointer; }
 .boot-link  { color: var(--primary); text-decoration: none; font-family: monospace; font-weight: 600; }
