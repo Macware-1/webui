@@ -289,6 +289,305 @@
         </div>
       </section>
 
+      <!-- LOGGING ──────────────────────────────────────────────────────── -->
+      <section v-if="page === 'Logging'" class="content-panel">
+        <p class="mode-desc" style="margin-bottom:20px">
+          Click a CAN channel block to configure its logging ID and output target.
+          Arrows show active logging paths. WiFi and Bluetooth are not yet supported.
+        </p>
+
+        <!-- Block diagram (pure SVG) -->
+        <div class="log-diagram-wrap">
+          <svg class="log-diagram-svg" viewBox="0 0 700 310" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="ah-on"  markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                <polygon points="0 0, 10 4, 0 8" fill="#3b82f6"/>
+              </marker>
+              <marker id="ah-off" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                <polygon points="0 0, 10 4, 0 8" fill="#243549"/>
+              </marker>
+            </defs>
+
+            <!-- CAN Channel 1 -->
+            <g @click="openChanPopup(1)" style="cursor:pointer">
+              <rect x="30" y="20" width="185" height="108" rx="12"
+                    :fill="cfg.logging.ch1.enabled ? '#0a1c30' : '#101e33'"
+                    :stroke="cfg.logging.ch1.enabled ? '#3b82f6' : '#1b2d47'"
+                    stroke-width="2"/>
+              <text x="122" y="62"  text-anchor="middle" font-size="30">📟</text>
+              <text x="122" y="88"  text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">CAN Channel 1</text>
+              <text x="122" y="107" text-anchor="middle" fill="#64748b" font-size="12" font-family="Inter,system-ui,sans-serif">Logging ID: {{ cfg.logging.ch1.logging_id }}</text>
+              <text x="122" y="122" text-anchor="middle" fill="#3b82f6" font-size="10" font-family="Inter,system-ui,sans-serif">▶ click to configure</text>
+            </g>
+
+            <!-- CAN Channel 2 -->
+            <g @click="openChanPopup(2)" style="cursor:pointer">
+              <rect x="485" y="20" width="185" height="108" rx="12"
+                    :fill="cfg.logging.ch2.enabled ? '#0a1c30' : '#101e33'"
+                    :stroke="cfg.logging.ch2.enabled ? '#3b82f6' : '#1b2d47'"
+                    stroke-width="2"/>
+              <text x="577" y="62"  text-anchor="middle" font-size="30">📟</text>
+              <text x="577" y="88"  text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">CAN Channel 2</text>
+              <text x="577" y="107" text-anchor="middle" fill="#64748b" font-size="12" font-family="Inter,system-ui,sans-serif">Logging ID: {{ cfg.logging.ch2.logging_id }}</text>
+              <text x="577" y="122" text-anchor="middle" fill="#3b82f6" font-size="10" font-family="Inter,system-ui,sans-serif">▶ click to configure</text>
+            </g>
+
+            <!-- Arrow: Ch1 → ETH -->
+            <line x1="122" y1="128" x2="265" y2="197"
+                  :stroke="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? '#3b82f6' : '#243549'"
+                  stroke-width="2.5"
+                  :stroke-dasharray="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? '6,4' : '4,5'"
+                  :marker-end="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? 'url(#ah-on)' : 'url(#ah-off)'"/>
+
+            <!-- Arrow: Ch2 → ETH -->
+            <line x1="577" y1="128" x2="395" y2="197"
+                  :stroke="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? '#3b82f6' : '#243549'"
+                  stroke-width="2.5"
+                  :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? '6,4' : '4,5'"
+                  :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? 'url(#ah-on)' : 'url(#ah-off)'"/>
+
+            <!-- Ethernet block -->
+            <rect x="175" y="197" width="260" height="100" rx="12"
+                  :fill="system.link_up ? '#081a10' : '#1a0909'"
+                  :stroke="system.link_up ? '#10b981' : '#ef4444'"
+                  stroke-width="2"/>
+            <text x="305" y="241" text-anchor="middle" font-size="30">🌐</text>
+            <text x="305" y="265" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">100 Mbps Ethernet</text>
+            <circle cx="258" cy="283" r="5" :fill="system.link_up ? '#10b981' : '#ef4444'"/>
+            <text x="268" y="287" :fill="system.link_up ? '#10b981' : '#ef4444'" font-size="12" font-family="Inter,system-ui,sans-serif">
+              {{ system.link_up ? 'Connected' : 'Disconnected' }}
+            </text>
+
+            <!-- WiFi block (disabled / coming soon) -->
+            <g opacity="0.38">
+              <rect x="458" y="197" width="110" height="100" rx="12" fill="#101e33" stroke="#1b2d47" stroke-width="1.5"/>
+              <text x="513" y="244" text-anchor="middle" font-size="28">📶</text>
+              <text x="513" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">WiFi</text>
+              <text x="513" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">Coming soon</text>
+            </g>
+
+            <!-- Bluetooth block (disabled / coming soon) -->
+            <g opacity="0.38">
+              <rect x="580" y="197" width="100" height="100" rx="12" fill="#101e33" stroke="#1b2d47" stroke-width="1.5"/>
+              <text x="630" y="244" text-anchor="middle" font-size="28">🔷</text>
+              <text x="630" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">BLE</text>
+              <text x="630" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">Coming soon</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Legend -->
+        <div class="log-legend">
+          <span class="leg-item"><svg width="28" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="6,4"/><polygon points="22,1 28,5 22,9" fill="#3b82f6"/></svg> Active logging path</span>
+          <span class="leg-item"><svg width="28" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="#243549" stroke-width="2.5" stroke-dasharray="4,5"/><polygon points="22,1 28,5 22,9" fill="#243549"/></svg> Inactive / not configured</span>
+        </div>
+      </section>
+
+      <!-- CAN BUS ──────────────────────────────────────────────────────── -->
+      <section v-if="page === 'CAN Bus'" class="content-panel">
+
+        <!-- Speed presets -->
+        <div class="cfg-card">
+          <div class="info-card-title">Nominal Speed Preset (PLL2Q = 80 MHz)</div>
+          <div class="preset-row">
+            <button class="preset-btn" @click="applyNomPreset(8,63,16,4)">125 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(4,63,16,4)">250 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(2,63,16,4)">500 kbps</button>
+            <button class="preset-btn" @click="applyNomPreset(1,63,16,4)">1 Mbps</button>
+          </div>
+          <div class="info-card-title" style="margin-top:16px">Data Speed Preset (CAN FD)</div>
+          <div class="preset-row">
+            <button class="preset-btn" @click="applyDataPreset(2,31,8,4)">1 Mbps</button>
+            <button class="preset-btn" @click="applyDataPreset(2,15,4,4)">2 Mbps</button>
+            <button class="preset-btn" @click="applyDataPreset(1,15,4,4)">4 Mbps</button>
+            <button class="preset-btn" @click="applyDataPreset(1,12,3,2)">5 Mbps</button>
+          </div>
+        </div>
+
+        <!-- Computed bit rate display -->
+        <div class="cfg-card">
+          <div class="info-card-title">Computed Parameters</div>
+          <div class="timing-info-grid">
+            <div class="timing-info-item">
+              <span class="timing-info-label">Nominal bit rate</span>
+              <span class="timing-info-val">{{ nomBitrate }}</span>
+            </div>
+            <div class="timing-info-item">
+              <span class="timing-info-label">Nominal sample point</span>
+              <span class="timing-info-val">{{ nomSamplePt }}</span>
+            </div>
+            <div class="timing-info-item">
+              <span class="timing-info-label">Data bit rate</span>
+              <span class="timing-info-val">{{ dataBitrate }}</span>
+            </div>
+            <div class="timing-info-item">
+              <span class="timing-info-label">Data sample point</span>
+              <span class="timing-info-val">{{ dataSamplePt }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nominal timing -->
+        <div class="cfg-card">
+          <div class="info-card-title">Nominal Phase Timing</div>
+          <div class="cfg-grid">
+            <div class="rule-field">
+              <label class="field-label">Prescaler (NBRP) 1–512</label>
+              <input v-model.number="cfg.can.nbrp"   type="number" min="1" max="512" class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Tseg1 (NTSEG1) 1–255</label>
+              <input v-model.number="cfg.can.ntseg1" type="number" min="1" max="255" class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Tseg2 (NTSEG2) 1–127</label>
+              <input v-model.number="cfg.can.ntseg2" type="number" min="1" max="127" class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">SJW (NSJW) 1–127</label>
+              <input v-model.number="cfg.can.nsjw"   type="number" min="1" max="127" class="text-input"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data timing -->
+        <div class="cfg-card">
+          <div class="info-card-title">Data Phase Timing (CAN FD)</div>
+          <div class="cfg-grid">
+            <div class="rule-field">
+              <label class="field-label">Prescaler (DBRP) 1–32</label>
+              <input v-model.number="cfg.can.dbrp"   type="number" min="1" max="32"  class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Tseg1 (DTSEG1) 1–32</label>
+              <input v-model.number="cfg.can.dtseg1" type="number" min="1" max="32"  class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Tseg2 (DTSEG2) 1–16</label>
+              <input v-model.number="cfg.can.dtseg2" type="number" min="1" max="16"  class="text-input"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">SJW (DSJW) 1–16</label>
+              <input v-model.number="cfg.can.dsjw"   type="number" min="1" max="16"  class="text-input"/>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode flags -->
+        <div class="cfg-card">
+          <div class="info-card-title">Frame Mode</div>
+          <div class="cfg-grid">
+            <div class="rule-field">
+              <label class="field-label">CAN FD</label>
+              <select v-model.number="cfg.can.fd_mode" class="text-input">
+                <option :value="1">Enabled</option>
+                <option :value="0">Disabled (classic CAN)</option>
+              </select>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Bit-Rate Switching (BRS)</label>
+              <select v-model.number="cfg.can.brs" class="text-input" :disabled="!cfg.can.fd_mode">
+                <option :value="1">Enabled</option>
+                <option :value="0">Disabled</option>
+              </select>
+            </div>
+          </div>
+          <p class="mode-desc" style="margin-top:8px">
+            Click <strong>Save &amp; Apply Config</strong> in the sidebar to write these settings to flash and reboot.
+          </p>
+        </div>
+
+      </section>
+
+      <!-- CAN REPLAY ───────────────────────────────────────────────────── -->
+      <section v-if="page === 'CAN Replay'" class="content-panel">
+        <div class="panel-head">
+          <h2 class="panel-title">CAN Replay</h2>
+          <span class="count-badge">Inject frames onto CAN bus</span>
+        </div>
+
+        <div class="cfg-card" style="max-width:540px">
+
+          <!-- CAN ID -->
+          <div class="cfg-row">
+            <label class="cfg-label">CAN ID (hex)</label>
+            <input v-model="replay.id" class="text-input mono"
+                   placeholder="0x123" maxlength="12" spellcheck="false"/>
+          </div>
+
+          <!-- Frame type -->
+          <div class="cfg-row">
+            <label class="cfg-label">Frame Type</label>
+            <div class="radio-row">
+              <label class="radio-opt">
+                <input type="radio" v-model="replay.fd" :value="false"/> Classic CAN
+              </label>
+              <label class="radio-opt" style="margin-left:16px">
+                <input type="radio" v-model="replay.fd" :value="true"/> CAN FD
+              </label>
+            </div>
+          </div>
+
+          <!-- BRS (only relevant for FD) -->
+          <div class="cfg-row" v-if="replay.fd">
+            <label class="cfg-label">Bit-Rate Switch</label>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="replay.brs"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- Data -->
+          <div class="cfg-row">
+            <label class="cfg-label">Data (hex bytes)</label>
+            <input v-model="replay.data" class="text-input mono"
+                   :placeholder="replay.fd ? 'up to 64 bytes, e.g. 0102030405060708' : 'up to 8 bytes, e.g. 0102030405060708'"
+                   maxlength="128" spellcheck="false"/>
+          </div>
+
+          <!-- DLC indicator -->
+          <div class="cfg-row">
+            <label class="cfg-label">DLC (auto)</label>
+            <span class="mono" style="color:var(--accent)">{{ replayDlc }}</span>
+          </div>
+
+          <!-- Send button -->
+          <div style="margin-top:16px">
+            <button class="btn btn-primary" @click="sendCanFrame"
+                    :disabled="replay.sending">
+              {{ replay.sending ? 'Sending…' : 'Send Frame' }}
+            </button>
+          </div>
+
+          <!-- Result -->
+          <div v-if="replay.result" :class="['replay-result', replay.ok ? 'replay-ok' : 'replay-err']"
+               style="margin-top:12px">
+            {{ replay.result }}
+          </div>
+
+        </div>
+
+        <!-- UDP replay spec -->
+        <div class="cfg-card" style="max-width:540px;margin-top:16px">
+          <div class="info-card-title">UDP Injection (port 4000)</div>
+          <p class="boot-desc">
+            Send a raw binary UDP datagram to <strong>{{ system.ip }}:4000</strong> to
+            inject a CAN frame without HTTP overhead. Wire format:
+          </p>
+          <table class="data-table" style="margin-top:8px">
+            <thead><tr><th>Offset</th><th>Size</th><th>Field</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">0–3</td><td>4 B</td><td>CAN ID (LE, bit30=extended)</td></tr>
+              <tr><td class="mono">4</td><td>1 B</td><td>DLC (0–15)</td></tr>
+              <tr><td class="mono">5</td><td>1 B</td><td>Flags (bit0=FD, bit1=BRS)</td></tr>
+              <tr><td class="mono">6–7</td><td>2 B</td><td>Reserved (0x0000)</td></tr>
+              <tr><td class="mono">8+</td><td>N B</td><td>Payload (dlc_to_len(DLC) bytes)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+
       <!-- FILTERING / CONFIG ─────────────────────────────────────────── -->
       <section v-if="page === 'Filtering'" class="content-panel">
 
@@ -390,21 +689,71 @@
 
     </main>
   </div>
+
+  <!-- ── Channel config popup ─────────────────────────────────────────── -->
+  <Teleport to="body">
+    <div v-if="chanPopup.open" class="popup-overlay" @click.self="chanPopup.open = false">
+      <div class="popup-card">
+        <div class="popup-header">
+          <span class="popup-title">CAN Channel {{ chanPopup.ch }}</span>
+          <button class="popup-close" @click="chanPopup.open = false">✕</button>
+        </div>
+
+        <label class="field-label" style="display:block;margin-bottom:6px">Logging ID (0–255)</label>
+        <input v-model.number="popupEdit.logging_id" type="number" min="0" max="255"
+               class="text-input" style="width:120px"/>
+        <p class="mode-desc" style="margin-top:4px;margin-bottom:20px">
+          This ID is embedded in every forwarded frame so the host can identify the source channel.
+        </p>
+
+        <label class="field-label" style="display:block;margin-bottom:10px">Logging Target</label>
+        <div class="target-row">
+          <button :class="['target-btn', { 'target-active': popupEdit.target === 0 }]"
+                  @click="popupEdit.target = 0">
+            <span class="target-icon">🌐</span>
+            <span class="target-name">Ethernet</span>
+          </button>
+          <button class="target-btn target-disabled" disabled title="Coming soon">
+            <span class="target-icon">📶</span>
+            <span class="target-name">WiFi</span>
+            <span class="target-soon">Soon</span>
+          </button>
+          <button class="target-btn target-disabled" disabled title="Coming soon">
+            <span class="target-icon">🔷</span>
+            <span class="target-name">Bluetooth</span>
+            <span class="target-soon">Soon</span>
+          </button>
+        </div>
+
+        <label class="field-label" style="display:block;margin:20px 0 6px">Logging</label>
+        <select v-model.number="popupEdit.enabled" class="text-input" style="width:160px">
+          <option :value="1">Enabled</option>
+          <option :value="0">Disabled</option>
+        </select>
+
+        <div class="popup-actions">
+          <button class="preset-btn" style="background:var(--primary);color:#fff;border-color:var(--primary)"
+                  @click="saveChanPopup">Apply</button>
+          <button class="preset-btn" @click="chanPopup.open = false">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted } from "vue"
+import { reactive, ref, computed, onMounted, watch, nextTick } from "vue"
 import axios from "axios"
 
 // ── Config ────────────────────────────────────────────────────────────────────
 // Empty string → relative URLs; page is served by the MCU itself so all
 // API calls go to the same host regardless of which interface (ETH or USB) is used.
 const MCU   = ""
-const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Filtering:'⚙' }
+const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙' }
 const RULE_SLOTS = ['r0','r1','r2','r3','r4','r5','r6','r7']
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Filtering"]
+const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering"]
 const page  = ref("Gauges")
 
 // ── Reactive state ────────────────────────────────────────────────────────────
@@ -429,6 +778,41 @@ const tx       = reactive({ pgn: '', data: '' })
 const bootState = ref('idle')
 const bootMsg   = ref('')
 
+// ── CAN Replay state ──────────────────────────────────────────────────────────
+const replay = reactive({ id: '0x123', data: '0102030405060708', fd: false, brs: false, sending: false, result: '', ok: false })
+
+const replayDlc = computed(() => {
+  const hex = replay.data.replace(/\s/g, '')
+  const byteCount = Math.floor(hex.length / 2)
+  const maxBytes  = replay.fd ? 64 : 8
+  const clamped   = Math.min(byteCount, maxBytes)
+  const lenTab    = [0,1,2,3,4,5,6,7,8,12,16,20,24,32,48,64]
+  let dlc = 0
+  for (let i = 0; i < 16; i++) { if (lenTab[i] >= clamped) { dlc = i; break; } }
+  return `${dlc} (${clamped} byte${clamped !== 1 ? 's' : ''})`
+})
+
+async function sendCanFrame() {
+  replay.sending = true
+  replay.result  = ''
+  try {
+    const body = JSON.stringify({ id: replay.id, data: replay.data.replace(/\s/g,''), fd: replay.fd, brs: replay.brs })
+    const r = await fetch(`${MCU}/api/send/can`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body
+    })
+    const j = await r.json()
+    replay.ok     = j.status === 'ok'
+    replay.result = replay.ok ? `Sent (${j.dlc} bytes)` : `Error: ${j.msg}`
+  } catch (e) {
+    replay.ok     = false
+    replay.result = `Network error: ${e.message}`
+  } finally {
+    replay.sending = false
+  }
+}
+
 // ── Save & Apply state ────────────────────────────────────────────────────────
 const saveState    = ref('idle')   // idle | saving | done | error
 const defaultState = ref('idle')   // idle | confirming
@@ -440,7 +824,14 @@ function makeRule() {
 }
 const cfg = reactive({
   board: { eth_ip: '10.104.3.64', eth_mask: '255.255.255.0', eth_gw: '10.104.3.1', usb_ip: '192.168.7.1', ptp_enable: 0 },
-  can:   { j1939: 0, dlc: 8, id_hex: '00000000' },
+  can:   { j1939: 0, dlc: 8, id_hex: '00000000',
+           nbrp: 4, ntseg1: 63, ntseg2: 16, nsjw: 4,
+           dbrp: 2, dtseg1: 15, dtseg2: 4,  dsjw: 4,
+           fd_mode: 1, brs: 1 },
+  logging: {
+    ch1: { enabled: 0, logging_id: 0, target: 0 },
+    ch2: { enabled: 0, logging_id: 0, target: 0 }
+  },
   usb:   { usbmode: 0 },
   filters: Object.fromEntries(RULE_SLOTS.map(s => [s, makeRule()]))
 })
@@ -448,6 +839,62 @@ const cfg = reactive({
 const activeRuleCount = computed(() =>
   RULE_SLOTS.filter(s => cfg.filters[s].action !== 0).length
 )
+
+// ── Logging diagram state ─────────────────────────────────────────────────────
+// target encoding: 0=Ethernet, 1=WiFi, 2=BLE  (matches LoggingChanCfg::target in firmware)
+const chanPopup = reactive({ open: false, ch: 1 })
+const popupEdit = reactive({ logging_id: 0, target: 0, enabled: 0 })
+
+function openChanPopup(ch) {
+  chanPopup.ch = ch
+  const src = cfg.logging[`ch${ch}`]
+  popupEdit.logging_id = src.logging_id
+  popupEdit.target     = src.target
+  popupEdit.enabled    = src.enabled
+  chanPopup.open = true
+}
+function saveChanPopup() {
+  const dst = cfg.logging[`ch${chanPopup.ch}`]
+  dst.logging_id = popupEdit.logging_id
+  dst.target     = popupEdit.target
+  dst.enabled    = popupEdit.enabled
+  chanPopup.open = false
+}
+
+// ── CAN Bus timing helpers ────────────────────────────────────────────────────
+const CAN_CLK = 80e6  // PLL2Q = 80 MHz
+
+function fmtHz(hz) {
+  if (hz >= 1e6)  return (hz / 1e6).toFixed(3).replace(/\.?0+$/, '') + ' Mbps'
+  if (hz >= 1e3)  return (hz / 1e3).toFixed(1).replace(/\.?0+$/, '') + ' kbps'
+  return hz + ' bps'
+}
+
+const nomBitrate = computed(() => {
+  const tq = 1 + cfg.can.ntseg1 + cfg.can.ntseg2
+  return fmtHz(CAN_CLK / (cfg.can.nbrp * tq))
+})
+const nomSamplePt = computed(() => {
+  const tq = 1 + cfg.can.ntseg1 + cfg.can.ntseg2
+  return ((1 + cfg.can.ntseg1) / tq * 100).toFixed(1) + '%'
+})
+const dataBitrate = computed(() => {
+  const tq = 1 + cfg.can.dtseg1 + cfg.can.dtseg2
+  return fmtHz(CAN_CLK / (cfg.can.dbrp * tq))
+})
+const dataSamplePt = computed(() => {
+  const tq = 1 + cfg.can.dtseg1 + cfg.can.dtseg2
+  return ((1 + cfg.can.dtseg1) / tq * 100).toFixed(1) + '%'
+})
+
+function applyNomPreset(nbrp, ntseg1, ntseg2, nsjw) {
+  cfg.can.nbrp = nbrp; cfg.can.ntseg1 = ntseg1
+  cfg.can.ntseg2 = ntseg2; cfg.can.nsjw = nsjw
+}
+function applyDataPreset(dbrp, dtseg1, dtseg2, dsjw) {
+  cfg.can.dbrp = dbrp; cfg.can.dtseg1 = dtseg1
+  cfg.can.dtseg2 = dtseg2; cfg.can.dsjw = dsjw
+}
 
 // ── Smoothing ─────────────────────────────────────────────────────────────────
 setInterval(() => {
@@ -582,11 +1029,30 @@ function applyDecodedConfig(d) {
     if (d.board.ptp_enable !== undefined) cfg.board.ptp_enable = d.board.ptp_enable
   }
   if (d.can) {
-    if (d.can.j1939 !== undefined) cfg.can.j1939  = d.can.j1939
-    if (d.can.dlc   !== undefined) cfg.can.dlc    = d.can.dlc
-    if (d.can.id    !== undefined) cfg.can.id_hex = d.can.id.toString(16).padStart(8,'0').toUpperCase()
+    if (d.can.j1939    !== undefined) cfg.can.j1939   = d.can.j1939
+    if (d.can.dlc      !== undefined) cfg.can.dlc     = d.can.dlc
+    if (d.can.id       !== undefined) cfg.can.id_hex  = d.can.id.toString(16).padStart(8,'0').toUpperCase()
+    if (d.can.nbrp     !== undefined) cfg.can.nbrp    = d.can.nbrp
+    if (d.can.ntseg1   !== undefined) cfg.can.ntseg1  = d.can.ntseg1
+    if (d.can.ntseg2   !== undefined) cfg.can.ntseg2  = d.can.ntseg2
+    if (d.can.nsjw     !== undefined) cfg.can.nsjw    = d.can.nsjw
+    if (d.can.dbrp     !== undefined) cfg.can.dbrp    = d.can.dbrp
+    if (d.can.dtseg1   !== undefined) cfg.can.dtseg1  = d.can.dtseg1
+    if (d.can.dtseg2   !== undefined) cfg.can.dtseg2  = d.can.dtseg2
+    if (d.can.dsjw     !== undefined) cfg.can.dsjw    = d.can.dsjw
+    if (d.can.fd_mode  !== undefined) cfg.can.fd_mode = d.can.fd_mode
+    if (d.can.brs      !== undefined) cfg.can.brs     = d.can.brs
   }
   if (d.usb && d.usb.usbmode !== undefined) cfg.usb.usbmode = d.usb.usbmode
+  if (d.logging) {
+    for (const ch of ['ch1', 'ch2']) {
+      const src = d.logging[ch]
+      if (!src) continue
+      if (src.enabled    !== undefined) cfg.logging[ch].enabled    = src.enabled
+      if (src.logging_id !== undefined) cfg.logging[ch].logging_id = src.logging_id
+      if (src.target     !== undefined) cfg.logging[ch].target     = src.target
+    }
+  }
   if (d.filters) {
     for (const slot of RULE_SLOTS) {
       const r = d.filters[slot]
@@ -627,11 +1093,25 @@ function buildConfigPayload() {
       ptp_enable: cfg.board.ptp_enable
     },
     can: {
-      dlc:   cfg.can.dlc,
-      id:    parseHex32(cfg.can.id_hex),
-      j1939: cfg.can.j1939
+      dlc:    cfg.can.dlc,
+      id:     parseHex32(cfg.can.id_hex),
+      j1939:  cfg.can.j1939,
+      nbrp:   cfg.can.nbrp,
+      ntseg1: cfg.can.ntseg1,
+      ntseg2: cfg.can.ntseg2,
+      nsjw:   cfg.can.nsjw,
+      dbrp:   cfg.can.dbrp,
+      dtseg1: cfg.can.dtseg1,
+      dtseg2: cfg.can.dtseg2,
+      dsjw:   cfg.can.dsjw,
+      fd_mode:cfg.can.fd_mode,
+      brs:    cfg.can.brs
     },
     usb:     { usbmode: cfg.usb.usbmode },
+    logging: {
+      ch1: { enabled: cfg.logging.ch1.enabled, logging_id: cfg.logging.ch1.logging_id, target: cfg.logging.ch1.target },
+      ch2: { enabled: cfg.logging.ch2.enabled, logging_id: cfg.logging.ch2.logging_id, target: cfg.logging.ch2.target }
+    },
     filters
   }
 }
@@ -675,10 +1155,15 @@ function applyDefaults() {
   cfg.board.eth_gw     = '10.104.3.1'
   cfg.board.usb_ip     = '192.168.7.1'
   cfg.board.ptp_enable = 0
-  cfg.can.j1939  = 0
-  cfg.can.dlc    = 8
-  cfg.can.id_hex = '00000000'
+  cfg.can.j1939   = 0
+  cfg.can.dlc     = 8
+  cfg.can.id_hex  = '00000000'
+  cfg.can.nbrp    = 4;  cfg.can.ntseg1 = 63; cfg.can.ntseg2 = 16; cfg.can.nsjw = 4
+  cfg.can.dbrp    = 2;  cfg.can.dtseg1 = 15; cfg.can.dtseg2 = 4;  cfg.can.dsjw = 4
+  cfg.can.fd_mode = 1;  cfg.can.brs    = 1
   cfg.usb.usbmode = 0
+  cfg.logging.ch1 = { enabled: 0, logging_id: 0, target: 0 }
+  cfg.logging.ch2 = { enabled: 0, logging_id: 0, target: 0 }
   for (const s of RULE_SLOTS) Object.assign(cfg.filters[s], makeRule())
   defaultState.value = 'idle'
   saveAndApply()
@@ -1218,6 +1703,11 @@ body {
 .boot-warn  { font-size: 13px; color: #fbbf24; line-height: 1.6; }
 .boot-ok    { font-size: 14px; color: #34d399; font-weight: 600; }
 .boot-err   { font-size: 13px; color: #f87171; }
+.replay-result { font-size: 14px; font-weight: 600; padding: 8px 12px; border-radius: 6px; }
+.replay-ok     { color: #34d399; background: rgba(52,211,153,.1); }
+.replay-err    { color: #f87171; background: rgba(248,113,113,.1); }
+.radio-row     { display: flex; align-items: center; gap: 8px; }
+.radio-opt     { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text); cursor: pointer; }
 .boot-link  { color: var(--primary); text-decoration: none; font-family: monospace; font-weight: 600; }
 .boot-link:hover { text-decoration: underline; }
 .boot-btn       { margin-top: 4px; }
@@ -1270,4 +1760,73 @@ code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: va
 }
 .rule-field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+
+/* ── CAN Bus page ────────────────────────────────────────────────────────── */
+.preset-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.preset-btn {
+  padding: 7px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--dim);
+  color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.preset-btn:hover { background: var(--primary); border-color: var(--primary); color: #fff; }
+.timing-info-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px; margin-top: 12px;
+}
+.timing-info-item { display: flex; flex-direction: column; gap: 4px; }
+.timing-info-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.timing-info-val { font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ── Logging page ────────────────────────────────────────────────────────── */
+.log-diagram-wrap {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px 16px;
+  margin-bottom: 16px;
+}
+.log-diagram-svg {
+  width: 100%; max-width: 700px;
+  display: block; margin: 0 auto;
+}
+.log-legend {
+  display: flex; gap: 24px; flex-wrap: wrap;
+  font-size: 12px; color: var(--muted);
+  padding: 4px 0;
+}
+.leg-item { display: flex; align-items: center; gap: 8px; }
+
+/* ── Channel config popup ────────────────────────────────────────────────── */
+.popup-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.popup-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 28px 28px 24px;
+  width: 420px; max-width: 95vw;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+}
+.popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.popup-title { font-size: 17px; font-weight: 700; color: var(--text); }
+.popup-close {
+  background: none; border: none; color: var(--muted); font-size: 16px;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+  transition: color 0.15s;
+}
+.popup-close:hover { color: var(--text); }
+.target-row { display: flex; gap: 10px; }
+.target-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 12px 8px; border-radius: var(--radius-sm);
+  border: 2px solid var(--border); background: var(--dim);
+  color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.target-btn:hover:not(:disabled) { border-color: var(--primary); }
+.target-active { border-color: var(--primary) !important; background: #0d2244 !important; }
+.target-disabled { opacity: 0.38; cursor: not-allowed !important; }
+.target-icon { font-size: 22px; }
+.target-name { font-size: 12px; font-weight: 600; }
+.target-soon { font-size: 10px; color: var(--muted); }
+.popup-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
 </style>
