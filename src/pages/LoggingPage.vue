@@ -1,6 +1,6 @@
 <template>
   <section class="content-panel">
-    <p class="mode-desc">Click a CAN channel block to configure its logging ID and output target. Arrows show active logging paths.</p>
+    <p class="mode-desc">Click a CAN channel block to configure its logging ID, output target, and full CAN bus settings. Click the Ethernet block to configure network + PTP settings. Arrows show active logging paths.</p>
     <div class="log-diagram-wrap">
       <svg class="log-diagram-svg" viewBox="0 0 700 310" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -61,6 +61,7 @@
               :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? '6,4' : '4,5'"
               :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? 'url(#ah-usb)' : 'url(#ah-off)'"/>
 
+      <g @click="$emit('open-ethernet')" style="cursor:pointer">
         <rect x="175" y="197" width="260" height="100" rx="12"
               :fill="system.link_up ? '#081a10' : '#1a0909'"
               :stroke="system.link_up ? '#10b981' : '#ef4444'"
@@ -71,6 +72,7 @@
         <text x="268" y="287" :fill="system.link_up ? '#10b981' : '#ef4444'" font-size="12" font-family="Inter,system-ui,sans-serif">
           {{ system.link_up ? 'Connected' : 'Disconnected' }}
         </text>
+      </g>
 
         <rect x="458" y="197" width="110" height="100" rx="12"
               :fill="(cfg.logging.ch1.enabled && cfg.logging.ch1.target===1) || (cfg.logging.ch2.enabled && cfg.logging.ch2.target===1) ? '#1a0f2e' : '#101e33'"

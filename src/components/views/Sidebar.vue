@@ -4,7 +4,7 @@
       <div class="brand-main">
         <div class="brand-icon">⚙</div>
         <div class="brand-copy">
-          <div class="brand-name">CAN Gateway</div>
+          <div class="brand-name">CanX</div>
           <!-- <div class="brand-sub">CNGW175</div> -->
         </div>
       </div>

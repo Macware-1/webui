@@ -48,7 +48,7 @@
       />
       <NodesPage v-else-if="page === 'Nodes'" :nodes="nodes" />
       <SystemInfoPage v-else-if="page === 'System Info'" :system="system" :cfg="cfg" :formatUptime="formatUptime" />
-      <LoggingPage v-else-if="page === 'Logging'" :cfg="cfg" :system="system" @open-channel="openChanPopup" />
+      <LoggingPage v-else-if="page === 'Logging'" :cfg="cfg" :system="system" @open-channel="openChanPopup" @open-ethernet="openEthernetPopup" />
       <CANBusPage
         v-else-if="page === 'CAN Bus'"
         :cfg="cfg"
@@ -85,6 +85,13 @@
       :popupEdit="popupEdit"
       @close="chanPopup.open = false"
       @apply="saveChanPopup"
+      @open-ethernet="openEthernetPopup"
+    />
+    <EthernetConfigPopup
+      :ethPopup="ethPopup"
+      :ethPopupEdit="ethPopupEdit"
+      @close="ethPopup.open = false"
+      @apply="saveEthernetPopup"
     />
 </template>
 
@@ -104,6 +111,7 @@ import CANReplayPage from "./pages/CANReplayPage.vue"
 import FilteringPage from "./pages/FilteringPage.vue"
 import RadxaPage from "./pages/RadxaPage.vue"
 import ChannelConfigPopup from "./components/views/ChannelConfigPopup.vue"
+import EthernetConfigPopup from "./components/views/EthernetConfigPopup.vue"
 import Button from "./components/ui/Button.vue"
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -231,7 +239,27 @@ const activeRuleCount = computed(() =>
 // ── Logging diagram state ─────────────────────────────────────────────────────
 // target encoding: 0=Ethernet, 1=WiFi, 2=BLE  (matches LoggingChanCfg::target in firmware)
 const chanPopup = reactive({ open: false, ch: 1 })
-const popupEdit = reactive({ logging_id: 0, target: 0, enabled: 0 })
+const popupEdit = reactive({
+  logging_id: 0,
+  target: 0,
+  enabled: 0,
+  j1939: 0,
+  dlc: 8,
+  id_hex: '00000000',
+  nbrp: 2,
+  ntseg1: 59,
+  ntseg2: 20,
+  nsjw: 20,
+  dbrp: 2,
+  dtseg1: 15,
+  dtseg2: 4,
+  dsjw: 4,
+  fd_mode: 1,
+  brs: 1,
+  listen_only: 0,
+})
+const ethPopup = reactive({ open: false })
+const ethPopupEdit = reactive({ eth_ip: '', eth_mask: '', eth_gw: '', usb_ip: '', ptp_enable: 0 })
 
 function openChanPopup(ch) {
   chanPopup.ch = ch
@@ -239,6 +267,20 @@ function openChanPopup(ch) {
   popupEdit.logging_id = src.logging_id
   popupEdit.target     = src.target
   popupEdit.enabled    = src.enabled
+  popupEdit.j1939      = cfg.can.j1939
+  popupEdit.dlc        = cfg.can.dlc
+  popupEdit.id_hex     = cfg.can.id_hex
+  popupEdit.nbrp       = cfg.can.nbrp
+  popupEdit.ntseg1     = cfg.can.ntseg1
+  popupEdit.ntseg2     = cfg.can.ntseg2
+  popupEdit.nsjw       = cfg.can.nsjw
+  popupEdit.dbrp       = cfg.can.dbrp
+  popupEdit.dtseg1     = cfg.can.dtseg1
+  popupEdit.dtseg2     = cfg.can.dtseg2
+  popupEdit.dsjw       = cfg.can.dsjw
+  popupEdit.fd_mode    = cfg.can.fd_mode
+  popupEdit.brs        = cfg.can.brs
+  popupEdit.listen_only= cfg.can.listen_only
   chanPopup.open = true
 }
 function saveChanPopup() {
@@ -246,7 +288,41 @@ function saveChanPopup() {
   dst.logging_id = popupEdit.logging_id
   dst.target     = popupEdit.target
   dst.enabled    = popupEdit.enabled
+  Object.assign(cfg.can, {
+    j1939: popupEdit.j1939,
+    dlc: popupEdit.dlc,
+    id_hex: popupEdit.id_hex,
+    nbrp: popupEdit.nbrp,
+    ntseg1: popupEdit.ntseg1,
+    ntseg2: popupEdit.ntseg2,
+    nsjw: popupEdit.nsjw,
+    dbrp: popupEdit.dbrp,
+    dtseg1: popupEdit.dtseg1,
+    dtseg2: popupEdit.dtseg2,
+    dsjw: popupEdit.dsjw,
+    fd_mode: popupEdit.fd_mode,
+    brs: popupEdit.brs,
+    listen_only: popupEdit.listen_only,
+  })
   chanPopup.open = false
+}
+
+function openEthernetPopup() {
+  ethPopupEdit.eth_ip = cfg.board.eth_ip
+  ethPopupEdit.eth_mask = cfg.board.eth_mask
+  ethPopupEdit.eth_gw = cfg.board.eth_gw
+  ethPopupEdit.usb_ip = cfg.board.usb_ip
+  ethPopupEdit.ptp_enable = cfg.board.ptp_enable
+  ethPopup.open = true
+}
+
+function saveEthernetPopup() {
+  cfg.board.eth_ip = ethPopupEdit.eth_ip
+  cfg.board.eth_mask = ethPopupEdit.eth_mask
+  cfg.board.eth_gw = ethPopupEdit.eth_gw
+  cfg.board.usb_ip = ethPopupEdit.usb_ip
+  cfg.board.ptp_enable = ethPopupEdit.ptp_enable
+  ethPopup.open = false
 }
 
 // ── CAN Bus timing helpers ────────────────────────────────────────────────────

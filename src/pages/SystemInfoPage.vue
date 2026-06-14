@@ -65,7 +65,7 @@
           <div class="ptp-label">{{ cfg.board.ptp_enable ? 'Enabled' : 'Disabled' }}</div>
           <div class="ptp-desc">
             {{ cfg.board.ptp_enable
-               ? 'Hardware timestamp sync active — sending Pdelay_Req every 1 s'
+               ? 'Hardware timestamp sync active'
                : 'No PTP frames sent — task is idle' }}
           </div>
         </div>

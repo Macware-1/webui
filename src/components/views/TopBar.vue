@@ -2,7 +2,7 @@
   <header class="topbar">
     <div>
       <h1 class="topbar-title">{{ page }}</h1>
-      <p class="topbar-sub">J1939 → Ethernet Gateway</p>
+      <p class="topbar-sub">CAN Gateway</p>
     </div>
     <div :class="['conn-badge', system.link_up ? 'conn-up' : 'conn-down']">
       <span class="conn-dot"></span>
