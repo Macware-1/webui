@@ -2,1012 +2,121 @@
   <div class="app">
 
     <!-- ── SIDEBAR ─────────────────────────────────────────────────────── -->
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="brand-icon">⚙</div>
-        <div>
-          <div class="brand-name">J1939 GW</div>
-          <div class="brand-sub">STM32H755</div>
-        </div>
-      </div>
+    <Sidebar
+      :page="page"
+      :pages="pages"
+      :icons="ICONS"
+      :saveState="saveState"
+      :defaultState="defaultState"
+      :system="system"
+      :formatUptime="formatUptime"
+      :collapsed="sidebarCollapsed"
+      @save="saveAndApply"
+      @confirm-default="defaultState = 'confirming'"
+      @apply-defaults="applyDefaults"
+      @cancel-default="defaultState = 'idle'"
+      @update:page="page = $event"
+      @toggle-collapse="sidebarCollapsed = !sidebarCollapsed"
+    />
 
-      <!-- Save & Apply button -->
-      <button :class="['save-btn', `save-${saveState}`]" @click="saveAndApply"
-              :disabled="saveState === 'saving' || saveState === 'rebooting'">
-        <span v-if="saveState === 'idle'">💾 Save &amp; Apply Config</span>
-        <span v-else-if="saveState === 'saving'" class="save-spinner-row">
-          <span class="save-spin"></span>Saving…
-        </span>
-        <span v-else-if="saveState === 'rebooting'" class="save-spinner-row">
-          <span class="save-spin"></span>Rebooting…
-        </span>
-        <span v-else-if="saveState === 'done'">✓ Config Applied</span>
-        <span v-else>✕ Save Failed</span>
-      </button>
+    <!-- Mobile fixed toggle (outside sidebar transform) -->
+    <Button
+      class="mobile-collapse-toggle"
+      :class="{ collapsed: sidebarCollapsed }"
+      variant="primary"
+      size="lg"
+      @click="sidebarCollapsed = !sidebarCollapsed"
+      :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+    >
+      {{ sidebarCollapsed ? '»' : '«' }}
+    </Button>
 
-      <!-- Default Config button -->
-      <template v-if="defaultState === 'idle'">
-        <button class="save-btn save-default" @click="defaultState = 'confirming'">
-          🔄 Reset to Defaults
-        </button>
-      </template>
-      <template v-else-if="defaultState === 'confirming'">
-        <div class="default-confirm">
-          <span class="default-warn">Reset all config to factory defaults?</span>
-          <div class="default-row">
-            <button class="btn-half btn-danger-sm" @click="applyDefaults">Yes, Reset</button>
-            <button class="btn-half btn-neutral-sm" @click="defaultState = 'idle'">Cancel</button>
-          </div>
-        </div>
-      </template>
-
-      <nav class="nav">
-        <button v-for="p in pages" :key="p"
-                :class="['nav-btn', { active: page === p }]"
-                @click="page = p">
-          <span class="nav-icon">{{ ICONS[p] }}</span>
-          <span class="nav-label">{{ p }}</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="live-badge">
-          <span class="live-dot"></span>LIVE
-        </div>
-        <div class="uptime-label">{{ formatUptime(system.uptime) }}</div>
-      </div>
-    </aside>
-
-    <!-- ── MAIN ───────────────────────────────────────────────────────── -->
     <main class="main">
-
-      <header class="topbar">
-        <div>
-          <h1 class="topbar-title">{{ page }}</h1>
-          <p class="topbar-sub">J1939 → Ethernet Gateway</p>
-        </div>
-        <div :class="['conn-badge', system.link_up ? 'conn-up' : 'conn-down']">
-          <span class="conn-dot"></span>
-          {{ system.link_up ? 'Connected' : 'Disconnected' }}
-        </div>
-      </header>
-
-      <!-- GAUGES ────────────────────────────────────────────────────── -->
-      <section v-if="page === 'Gauges'" class="gauges-page">
-        <div class="gauges-grid">
-          <Gauge title="Engine RPM"    :value="smooth.engine_speed"    :max="3000" unit="rpm"  color="#3b82f6"/>
-          <Gauge title="Vehicle Speed" :value="smooth.vehicle_speed"   :max="140"  unit="km/h" color="#10b981"/>
-          <Gauge title="Fuel Level"    :value="smooth.fuel_level"      :max="100"  unit="%"    color="#f59e0b"/>
-          <Gauge title="Engine Load"   :value="smooth.engine_load"     :max="100"  unit="%"    color="#8b5cf6"/>
-        </div>
-
-        <div class="bottom-row">
-          <MetricCard icon="🌡" label="Coolant"  :value="smooth.coolant_temp.toFixed(1)"    unit="°C" :warn="smooth.coolant_temp > 100"/>
-          <MetricCard icon="🔋" label="Battery"  :value="smooth.battery_voltage.toFixed(2)" unit="V"  :warn="smooth.battery_voltage < 11.5 && smooth.battery_voltage > 0"/>
-          <MetricCard icon="🎯" label="Throttle" :value="(telemetry.throttle_pct||0).toFixed(1)" unit="%"/>
-
-          <div class="status-card">
-            <div class="status-card-title">Status</div>
-            <StatusRow label="Engine"  :on="telemetry.status.engine_running"/>
-            <StatusRow label="Brake"   :on="telemetry.status.brake"/>
-            <StatusRow label="PTO"     :on="telemetry.status.pto"/>
-            <StatusRow label="Cruise"  :on="telemetry.status.cruise"/>
-          </div>
-        </div>
-      </section>
-
-      <!-- DIAGNOSTICS ───────────────────────────────────────────────── -->
-      <section v-if="page === 'Diagnostics'" class="content-panel">
-        <div class="panel-head">
-          <h2 class="panel-title">Active Faults (DM1)</h2>
-          <span :class="['fault-badge', dtc.length ? 'fault-active' : 'fault-clear']">
-            {{ dtc.length ? `${dtc.length} active` : 'No faults' }}
-          </span>
-        </div>
-
-        <div v-if="!dtc.length" class="empty-state">
-          <div class="empty-icon">✅</div>
-          <p>No active diagnostic trouble codes</p>
-        </div>
-
-        <table v-else class="data-table">
-          <thead>
-            <tr><th>SPN</th><th>FMI</th><th>Description</th><th>Count</th><th>ECU</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="(d, i) in dtc" :key="i" :class="severityClass(d.fmi)">
-              <td class="mono bold">{{ d.spn }}</td>
-              <td><span :class="['fmi-pill', severityClass(d.fmi)]">{{ d.fmi }}</span></td>
-              <td>{{ d.desc }}</td>
-              <td>{{ d.count }}</td>
-              <td class="mono">{{ d.ecu }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-
-      <!-- CONTROLS ──────────────────────────────────────────────────── -->
-      <section v-if="page === 'Controls'" class="content-panel">
-        <div class="panel-head"><h2 class="panel-title">Control Panel</h2></div>
-        <div class="controls-grid">
-
-          <div class="ctrl-card">
-            <div class="ctrl-title">Throttle</div>
-            <div class="ctrl-bigval">{{ throttle }}<span class="ctrl-unit">%</span></div>
-            <input type="range" v-model="throttle" min="0" max="100" class="slider"/>
-            <button class="btn btn-primary" @click="sendThrottle">Send Throttle</button>
-          </div>
-
-          <div class="ctrl-card">
-            <div class="ctrl-title">Engine Control</div>
-            <button class="btn btn-success" @click="send({type:'control',engine:'start'})">▶ Start Engine</button>
-            <button class="btn btn-danger"  @click="send({type:'control',engine:'stop'})">■ Stop Engine</button>
-          </div>
-
-          <div class="ctrl-card">
-            <div class="ctrl-title">Raw J1939 TX</div>
-            <input v-model="tx.pgn"  class="text-input" placeholder="PGN  e.g. 61444"/>
-            <input v-model="tx.data" class="text-input" placeholder="8-byte hex data"/>
-            <button class="btn btn-primary" @click="send({type:'j1939_tx',...tx})">📡 Send Frame</button>
-          </div>
-
-        </div>
-      </section>
-
-      <!-- NODES ─────────────────────────────────────────────────────── -->
-      <section v-if="page === 'Nodes'" class="content-panel">
-        <div class="panel-head">
-          <h2 class="panel-title">J1939 Network Nodes</h2>
-          <span class="count-badge">{{ nodes.length }} ECU{{ nodes.length !== 1 ? 's' : '' }}</span>
-        </div>
-
-        <div v-if="!nodes.length" class="empty-state">
-          <div class="empty-icon">📡</div>
-          <p>No ECUs detected on the CAN bus yet</p>
-        </div>
-
-        <div v-else class="nodes-grid">
-          <div v-for="n in nodes" :key="n.addr" class="node-card">
-            <div class="node-online-dot"></div>
-            <div class="node-addr">{{ n.addr }}</div>
-            <div class="node-dec">dec {{ parseInt(n.addr, 16) }}</div>
-            <div class="node-status-label">Online</div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SYSTEM INFO ────────────────────────────────────────────────── -->
-      <section v-if="page === 'System Info'" class="content-panel">
-        <div class="panel-head"><h2 class="panel-title">System Information</h2></div>
-        <div class="info-grid">
-
-          <div class="info-card">
-            <div class="info-card-title">Network (Live)</div>
-            <InfoRow label="IP Address"  :value="system.ip"/>
-            <InfoRow label="MAC Address" :value="system.mac"/>
-            <InfoRow label="Gateway"     :value="system.gateway"/>
-          </div>
-
-          <div class="info-card" style="grid-column: 1 / -1">
-            <div class="info-card-title">Network Configuration</div>
-            <div class="cfg-grid" style="margin-top:10px">
-              <div class="rule-field">
-                <label class="field-label">ETH IP</label>
-                <input v-model="cfg.board.eth_ip"   class="text-input mono" placeholder="10.104.3.64"/>
-              </div>
-              <div class="rule-field">
-                <label class="field-label">Subnet Mask</label>
-                <input v-model="cfg.board.eth_mask" class="text-input mono" placeholder="255.255.255.0"/>
-              </div>
-              <div class="rule-field">
-                <label class="field-label">Gateway</label>
-                <input v-model="cfg.board.eth_gw"   class="text-input mono" placeholder="10.104.3.1"/>
-              </div>
-              <div class="rule-field">
-                <label class="field-label">USB IP</label>
-                <input v-model="cfg.board.usb_ip"   class="text-input mono" placeholder="192.168.7.64"/>
-              </div>
-            </div>
-            <p class="boot-desc" style="margin-top:8px">Changes take effect after <strong>Save &amp; Apply Config</strong>.</p>
-          </div>
-
-          <div class="info-card">
-            <div class="info-card-title">Ethernet PHY</div>
-            <InfoRow label="Chip"   :value="system.phy"/>
-            <InfoRow label="Link">
-              <template #val>
-                <span :class="system.link_up ? 'pill-up' : 'pill-down'">
-                  {{ system.link_up ? 'UP' : 'DOWN' }}
-                </span>
-              </template>
-            </InfoRow>
-            <InfoRow label="Speed"  :value="system.speed"/>
-            <InfoRow label="Duplex" :value="system.duplex"/>
-          </div>
-
-          <div class="info-card">
-            <div class="info-card-title">Device</div>
-            <div :class="['device-status', system.link_up ? 'dev-online' : 'dev-offline']">
-              {{ system.link_up ? 'ONLINE' : 'OFFLINE' }}
-            </div>
-            <InfoRow label="Uptime" :value="formatUptime(system.uptime)"/>
-            <InfoRow label="Heap"   :value="system.heap ? `${system.heap} B` : '—'"/>
-            <InfoRow label="Tasks"  :value="system.tasks || '—'"/>
-            <InfoRow label="Clock"  :value="system.clock || '—'"/>
-          </div>
-
-        </div>
-
-        <!-- PTP Control -->
-        <div class="ptp-card">
-          <div class="boot-card-title">Precision Time Protocol (PTP / IEEE 802.1AS)</div>
-          <div class="ptp-row">
-            <div>
-              <div class="ptp-label">{{ cfg.board.ptp_enable ? 'Enabled' : 'Disabled' }}</div>
-              <div class="ptp-desc">
-                {{ cfg.board.ptp_enable
-                   ? 'Hardware timestamp sync active — sending Pdelay_Req every 1 s'
-                   : 'No PTP frames sent — task is idle' }}
-              </div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="cfg.board.ptp_enable" :true-value="1" :false-value="0"/>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <p class="boot-desc" style="margin-top:6px">
-            Toggle takes effect after <strong>Save &amp; Apply Config</strong> in the sidebar.
-          </p>
-        </div>
-
-        <!-- Radxa CLOG Forwarding -->
-        <div class="ptp-card">
-          <div class="boot-card-title">Radxa WiFi CLOG Forwarding</div>
-          <div class="ptp-row">
-            <div>
-              <div class="ptp-label">{{ cfg.board.radxa_fwd_enable ? 'Enabled' : 'Disabled' }}</div>
-              <div class="ptp-desc">
-                {{ cfg.board.radxa_fwd_enable
-                   ? 'Radxa will forward CLOG packets to the configured destination over WiFi'
-                   : 'CLOG forwarding via Radxa is off' }}
-              </div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="cfg.board.radxa_fwd_enable" :true-value="1" :false-value="0"/>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="cfg-grid" style="margin-top:10px">
-            <div class="rule-field">
-              <label class="field-label">Destination IP</label>
-              <input v-model="cfg.board.radxa_dest_ip" class="text-input mono" placeholder="192.168.1.100"
-                     :disabled="!cfg.board.radxa_fwd_enable"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Destination Port</label>
-              <input v-model.number="cfg.board.radxa_dest_port" type="number" min="1" max="65535"
-                     class="text-input mono" placeholder="47808"
-                     :disabled="!cfg.board.radxa_fwd_enable"/>
-            </div>
-          </div>
-          <p class="boot-desc" style="margin-top:6px">
-            Enter your PC's WiFi IP address. CLOG packets arrive on UDP port 47808 (same as wired).
-            Configure Radxa WiFi first via <code>nmcli</code> on the Radxa.
-            Takes effect after <strong>Save &amp; Apply Config</strong>.
-          </p>
-        </div>
-
-        <div class="boot-card">
-          <div class="boot-card-title">Firmware Update</div>
-
-          <template v-if="bootState === 'idle'">
-            <p class="boot-desc">
-              Reboot the device into bootloader mode to upload a new firmware
-              image via the OTA web interface at <span class="boot-url">192.168.1.100</span>.
-            </p>
-            <button class="btn btn-danger boot-btn" @click="bootState = 'confirming'">
-              ↩ Enter Bootloader Mode
-            </button>
-          </template>
-
-          <template v-else-if="bootState === 'confirming'">
-            <p class="boot-warn">
-              ⚠ The device will reboot immediately. The Ethernet connection will
-              drop and the app will be unreachable until the bootloader starts.
-            </p>
-            <div class="boot-row">
-              <button class="btn btn-danger  boot-btn-half" @click="confirmBootloader">Confirm reboot</button>
-              <button class="btn btn-neutral boot-btn-half" @click="bootState = 'idle'">Cancel</button>
-            </div>
-          </template>
-
-          <template v-else-if="bootState === 'sending'">
-            <div class="boot-spinner-row">
-              <div class="boot-spinner"></div>
-              <span class="boot-sending-txt">Sending reset command…</span>
-            </div>
-          </template>
-
-          <template v-else-if="bootState === 'done'">
-            <p class="boot-ok">✓ Device is rebooting into bootloader mode.</p>
-            <p class="boot-desc" style="margin-top:6px">
-              Connect to
-              <a class="boot-link" href="http://192.168.1.100" target="_blank">
-                http://192.168.1.100
-              </a>
-              to upload the <code>.fwu</code> package.
-            </p>
-            <button class="btn btn-neutral boot-btn" style="margin-top:12px"
-                    @click="bootState = 'idle'">Dismiss</button>
-          </template>
-
-          <template v-else-if="bootState === 'error'">
-            <p class="boot-err">✕ {{ bootMsg }}</p>
-            <button class="btn btn-neutral boot-btn" style="margin-top:10px"
-                    @click="bootState = 'idle'">Retry</button>
-          </template>
-        </div>
-      </section>
-
-      <!-- LOGGING ──────────────────────────────────────────────────────── -->
-      <section v-if="page === 'Logging'" class="content-panel">
-        <p class="mode-desc" style="margin-bottom:20px">
-          Click a CAN channel block to configure its logging ID and output target.
-          Arrows show active logging paths. Bluetooth is not yet supported.
-        </p>
-
-        <!-- Block diagram (pure SVG) -->
-        <div class="log-diagram-wrap">
-          <svg class="log-diagram-svg" viewBox="0 0 700 310" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <marker id="ah-on"  markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                <polygon points="0 0, 10 4, 0 8" fill="#3b82f6"/>
-              </marker>
-              <marker id="ah-off" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                <polygon points="0 0, 10 4, 0 8" fill="#243549"/>
-              </marker>
-              <marker id="ah-usb" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
-                <polygon points="0 0, 10 4, 0 8" fill="#a78bfa"/>
-              </marker>
-            </defs>
-
-            <!-- CAN Channel 1 -->
-            <g @click="openChanPopup(1)" style="cursor:pointer">
-              <rect x="30" y="20" width="185" height="108" rx="12"
-                    :fill="cfg.logging.ch1.enabled ? '#0a1c30' : '#101e33'"
-                    :stroke="cfg.logging.ch1.enabled ? '#3b82f6' : '#1b2d47'"
-                    stroke-width="2"/>
-              <text x="122" y="62"  text-anchor="middle" font-size="30">📟</text>
-              <text x="122" y="88"  text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">CAN Channel 1</text>
-              <text x="122" y="107" text-anchor="middle" fill="#64748b" font-size="12" font-family="Inter,system-ui,sans-serif">Logging ID: {{ cfg.logging.ch1.logging_id }}</text>
-              <text x="122" y="122" text-anchor="middle" fill="#3b82f6" font-size="10" font-family="Inter,system-ui,sans-serif">▶ click to configure</text>
-            </g>
-
-            <!-- CAN Channel 2 -->
-            <g @click="openChanPopup(2)" style="cursor:pointer">
-              <rect x="485" y="20" width="185" height="108" rx="12"
-                    :fill="cfg.logging.ch2.enabled ? '#0a1c30' : '#101e33'"
-                    :stroke="cfg.logging.ch2.enabled ? '#3b82f6' : '#1b2d47'"
-                    stroke-width="2"/>
-              <text x="577" y="62"  text-anchor="middle" font-size="30">📟</text>
-              <text x="577" y="88"  text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">CAN Channel 2</text>
-              <text x="577" y="107" text-anchor="middle" fill="#64748b" font-size="12" font-family="Inter,system-ui,sans-serif">Logging ID: {{ cfg.logging.ch2.logging_id }}</text>
-              <text x="577" y="122" text-anchor="middle" fill="#3b82f6" font-size="10" font-family="Inter,system-ui,sans-serif">▶ click to configure</text>
-            </g>
-
-            <!-- Arrow: Ch1 → ETH -->
-            <line x1="122" y1="128" x2="265" y2="197"
-                  :stroke="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? '#3b82f6' : '#243549'"
-                  stroke-width="2.5"
-                  :stroke-dasharray="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? '6,4' : '4,5'"
-                  :marker-end="cfg.logging.ch1.enabled && cfg.logging.ch1.target===0 ? 'url(#ah-on)' : 'url(#ah-off)'"/>
-
-            <!-- Arrow: Ch2 → ETH -->
-            <line x1="577" y1="128" x2="395" y2="197"
-                  :stroke="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? '#3b82f6' : '#243549'"
-                  stroke-width="2.5"
-                  :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? '6,4' : '4,5'"
-                  :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===0 ? 'url(#ah-on)' : 'url(#ah-off)'"/>
-
-            <!-- Arrow: Ch1 → USB ECM -->
-            <line x1="215" y1="128" x2="468" y2="197"
-                  :stroke="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? '#a78bfa' : '#243549'"
-                  stroke-width="2.5"
-                  :stroke-dasharray="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? '6,4' : '4,5'"
-                  :marker-end="cfg.logging.ch1.enabled && cfg.logging.ch1.target===1 ? 'url(#ah-usb)' : 'url(#ah-off)'"/>
-
-            <!-- Arrow: Ch2 → USB ECM -->
-            <line x1="577" y1="128" x2="558" y2="197"
-                  :stroke="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? '#a78bfa' : '#243549'"
-                  stroke-width="2.5"
-                  :stroke-dasharray="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? '6,4' : '4,5'"
-                  :marker-end="cfg.logging.ch2.enabled && cfg.logging.ch2.target===1 ? 'url(#ah-usb)' : 'url(#ah-off)'"/>
-
-            <!-- Ethernet block -->
-            <rect x="175" y="197" width="260" height="100" rx="12"
-                  :fill="system.link_up ? '#081a10' : '#1a0909'"
-                  :stroke="system.link_up ? '#10b981' : '#ef4444'"
-                  stroke-width="2"/>
-            <text x="305" y="241" text-anchor="middle" font-size="30">🌐</text>
-            <text x="305" y="265" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600" font-family="Inter,system-ui,sans-serif">100 Mbps Ethernet</text>
-            <circle cx="258" cy="283" r="5" :fill="system.link_up ? '#10b981' : '#ef4444'"/>
-            <text x="268" y="287" :fill="system.link_up ? '#10b981' : '#ef4444'" font-size="12" font-family="Inter,system-ui,sans-serif">
-              {{ system.link_up ? 'Connected' : 'Disconnected' }}
-            </text>
-
-            <!-- USB ECM block -->
-            <rect x="458" y="197" width="110" height="100" rx="12"
-                  :fill="(cfg.logging.ch1.enabled && cfg.logging.ch1.target===1) || (cfg.logging.ch2.enabled && cfg.logging.ch2.target===1) ? '#1a0f2e' : '#101e33'"
-                  :stroke="(cfg.logging.ch1.enabled && cfg.logging.ch1.target===1) || (cfg.logging.ch2.enabled && cfg.logging.ch2.target===1) ? '#a78bfa' : '#1b2d47'"
-                  stroke-width="2"/>
-            <text x="513" y="244" text-anchor="middle" font-size="28">🔌</text>
-            <text x="513" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">USB ECM</text>
-            <text x="513" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">192.168.7.x</text>
-
-            <!-- Bluetooth block (disabled / coming soon) -->
-            <g opacity="0.38">
-              <rect x="580" y="197" width="100" height="100" rx="12" fill="#101e33" stroke="#1b2d47" stroke-width="1.5"/>
-              <text x="630" y="244" text-anchor="middle" font-size="28">🔷</text>
-              <text x="630" y="267" text-anchor="middle" fill="#e2e8f0" font-size="13" font-weight="600" font-family="Inter,system-ui,sans-serif">BLE</text>
-              <text x="630" y="284" text-anchor="middle" fill="#64748b" font-size="10" font-family="Inter,system-ui,sans-serif">Coming soon</text>
-            </g>
-          </svg>
-        </div>
-
-        <!-- Legend -->
-        <div class="log-legend">
-          <span class="leg-item"><svg width="28" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="6,4"/><polygon points="22,1 28,5 22,9" fill="#3b82f6"/></svg> Active logging path</span>
-          <span class="leg-item"><svg width="28" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="#243549" stroke-width="2.5" stroke-dasharray="4,5"/><polygon points="22,1 28,5 22,9" fill="#243549"/></svg> Inactive / not configured</span>
-        </div>
-      </section>
-
-      <!-- CAN BUS ──────────────────────────────────────────────────────── -->
-      <section v-if="page === 'CAN Bus'" class="content-panel">
-
-        <!-- Speed presets -->
-        <div class="cfg-card">
-          <div class="info-card-title">Nominal Speed Preset (PLL2Q = 80 MHz)</div>
-          <div class="preset-row">
-            <button class="preset-btn" @click="applyNomPreset(8,59,20,20)">125 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(4,59,20,20)">250 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(2,59,20,20)">500 kbps</button>
-            <button class="preset-btn" @click="applyNomPreset(1,59,20,20)">1 Mbps</button>
-          </div>
-          <div class="info-card-title" style="margin-top:16px">Data Speed Preset (CAN FD)</div>
-          <div class="preset-row">
-            <button class="preset-btn" @click="applyDataPreset(2,31,8,4)">1 Mbps</button>
-            <button class="preset-btn" @click="applyDataPreset(2,15,4,4)">2 Mbps</button>
-            <button class="preset-btn" @click="applyDataPreset(1,15,4,4)">4 Mbps</button>
-            <button class="preset-btn" @click="applyDataPreset(1,12,3,2)">5 Mbps</button>
-          </div>
-        </div>
-
-        <!-- Computed bit rate display -->
-        <div class="cfg-card">
-          <div class="info-card-title">Computed Parameters</div>
-          <div class="timing-info-grid">
-            <div class="timing-info-item">
-              <span class="timing-info-label">Nominal bit rate</span>
-              <span class="timing-info-val">{{ nomBitrate }}</span>
-            </div>
-            <div class="timing-info-item">
-              <span class="timing-info-label">Nominal sample point</span>
-              <span class="timing-info-val">{{ nomSamplePt }}</span>
-            </div>
-            <div class="timing-info-item">
-              <span class="timing-info-label">Data bit rate</span>
-              <span class="timing-info-val">{{ dataBitrate }}</span>
-            </div>
-            <div class="timing-info-item">
-              <span class="timing-info-label">Data sample point</span>
-              <span class="timing-info-val">{{ dataSamplePt }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Nominal timing -->
-        <div class="cfg-card">
-          <div class="info-card-title">Nominal Phase Timing</div>
-          <div class="cfg-grid">
-            <div class="rule-field">
-              <label class="field-label">Prescaler (NBRP) 1–512</label>
-              <input v-model.number="cfg.can.nbrp"   type="number" min="1" max="512" class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Tseg1 (NTSEG1) 1–255</label>
-              <input v-model.number="cfg.can.ntseg1" type="number" min="1" max="255" class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Tseg2 (NTSEG2) 1–127</label>
-              <input v-model.number="cfg.can.ntseg2" type="number" min="1" max="127" class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">SJW (NSJW) 1–127</label>
-              <input v-model.number="cfg.can.nsjw"   type="number" min="1" max="127" class="text-input"/>
-            </div>
-          </div>
-        </div>
-
-        <!-- Data timing -->
-        <div class="cfg-card">
-          <div class="info-card-title">Data Phase Timing (CAN FD)</div>
-          <div class="cfg-grid">
-            <div class="rule-field">
-              <label class="field-label">Prescaler (DBRP) 1–32</label>
-              <input v-model.number="cfg.can.dbrp"   type="number" min="1" max="32"  class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Tseg1 (DTSEG1) 1–32</label>
-              <input v-model.number="cfg.can.dtseg1" type="number" min="1" max="32"  class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Tseg2 (DTSEG2) 1–16</label>
-              <input v-model.number="cfg.can.dtseg2" type="number" min="1" max="16"  class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">SJW (DSJW) 1–16</label>
-              <input v-model.number="cfg.can.dsjw"   type="number" min="1" max="16"  class="text-input"/>
-            </div>
-          </div>
-        </div>
-
-        <!-- Mode flags -->
-        <div class="cfg-card">
-          <div class="info-card-title">Frame Mode</div>
-          <div class="cfg-grid">
-            <div class="rule-field">
-              <label class="field-label">CAN FD</label>
-              <select v-model.number="cfg.can.fd_mode" class="text-input">
-                <option :value="1">Enabled</option>
-                <option :value="0">Disabled (classic CAN)</option>
-              </select>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Bit-Rate Switching (BRS)</label>
-              <select v-model.number="cfg.can.brs" class="text-input" :disabled="!cfg.can.fd_mode">
-                <option :value="1">Enabled</option>
-                <option :value="0">Disabled</option>
-              </select>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">ACK Mode</label>
-              <select v-model.number="cfg.can.listen_only" class="text-input">
-                <option :value="0">Active (ACK frames)</option>
-                <option :value="1">Listen-only (no ACK, passive)</option>
-              </select>
-            </div>
-          </div>
-          <p class="mode-desc" style="margin-top:8px">
-            Click <strong>Save &amp; Apply Config</strong> in the sidebar to write these settings to flash and reboot.
-          </p>
-        </div>
-
-      </section>
-
-      <!-- CAN REPLAY ───────────────────────────────────────────────────── -->
-      <section v-if="page === 'CAN Replay'" class="content-panel">
-        <div class="panel-head">
-          <h2 class="panel-title">CAN Replay</h2>
-          <span class="count-badge">Inject frames onto CAN bus</span>
-        </div>
-
-        <div class="cfg-card" style="max-width:540px">
-
-          <!-- CAN ID -->
-          <div class="cfg-row">
-            <label class="cfg-label">CAN ID (hex)</label>
-            <input v-model="inject.id" class="text-input mono"
-                   placeholder="0x123" maxlength="12" spellcheck="false"/>
-          </div>
-
-          <!-- Frame type -->
-          <div class="cfg-row">
-            <label class="cfg-label">Frame Type</label>
-            <div class="radio-row">
-              <label class="radio-opt">
-                <input type="radio" v-model="inject.fd" :value="false"/> Classic CAN
-              </label>
-              <label class="radio-opt" style="margin-left:16px">
-                <input type="radio" v-model="inject.fd" :value="true"/> CAN FD
-              </label>
-            </div>
-          </div>
-
-          <!-- BRS (only relevant for FD) -->
-          <div class="cfg-row" v-if="inject.fd">
-            <label class="cfg-label">Bit-Rate Switch</label>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="inject.brs"/>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- Data -->
-          <div class="cfg-row">
-            <label class="cfg-label">Data (hex bytes)</label>
-            <input v-model="inject.data" class="text-input mono"
-                   :placeholder="inject.fd ? 'up to 64 bytes, e.g. 0102030405060708' : 'up to 8 bytes, e.g. 0102030405060708'"
-                   maxlength="128" spellcheck="false"/>
-          </div>
-
-          <!-- DLC indicator -->
-          <div class="cfg-row">
-            <label class="cfg-label">DLC (auto)</label>
-            <span class="mono" style="color:var(--accent)">{{ injectDlc }}</span>
-          </div>
-
-          <!-- Send button -->
-          <div style="margin-top:16px">
-            <button class="btn btn-primary" @click="sendCanFrame"
-                    :disabled="inject.sending">
-              {{ inject.sending ? 'Sending…' : 'Send Frame' }}
-            </button>
-          </div>
-
-          <!-- Result -->
-          <div v-if="inject.result" :class="['inject-result', inject.ok ? 'inject-ok' : 'inject-err']"
-               style="margin-top:12px">
-            {{ inject.result }}
-          </div>
-
-        </div>
-
-        <!-- UDP inject spec -->
-        <div class="cfg-card" style="max-width:540px;margin-top:16px">
-          <div class="info-card-title">UDP Injection (port 4000)</div>
-          <p class="boot-desc">
-            Send a raw binary UDP datagram to <strong>{{ system.ip }}:4000</strong> to
-            inject a CAN frame without HTTP overhead. Wire format:
-          </p>
-          <table class="data-table" style="margin-top:8px">
-            <thead><tr><th>Offset</th><th>Size</th><th>Field</th></tr></thead>
-            <tbody>
-              <tr><td class="mono">0–3</td><td>4 B</td><td>CAN ID (LE, bit30=extended)</td></tr>
-              <tr><td class="mono">4</td><td>1 B</td><td>DLC (0–15)</td></tr>
-              <tr><td class="mono">5</td><td>1 B</td><td>Flags (bit0=FD, bit1=BRS)</td></tr>
-              <tr><td class="mono">6–7</td><td>2 B</td><td>Reserved (0x0000)</td></tr>
-              <tr><td class="mono">8+</td><td>N B</td><td>Payload (dlc_to_len(DLC) bytes)</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-      </section>
-
-      <!-- FILTERING / CONFIG ─────────────────────────────────────────── -->
-      <section v-if="page === 'Filtering'" class="content-panel">
-
-        <!-- CAN config -->
-        <div class="cfg-card">
-          <div class="info-card-title">CAN Configuration</div>
-          <div class="cfg-grid">
-            <div class="rule-field">
-              <label class="field-label">Mode</label>
-              <select v-model.number="cfg.can.j1939" class="text-input">
-                <option :value="1">J1939 Stack</option>
-                <option :value="0">Raw CAN</option>
-              </select>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Default DLC (0–8)</label>
-              <input v-model.number="cfg.can.dlc" type="number" min="0" max="8" class="text-input"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Default CAN ID (hex)</label>
-              <input v-model="cfg.can.id_hex" class="text-input mono" placeholder="00000000"/>
-            </div>
-          </div>
-        </div>
-
-        <!-- USB config -->
-        <div class="cfg-card">
-          <div class="info-card-title">USB Configuration</div>
-          <div class="rule-field" style="max-width:260px">
-            <label class="field-label">USB Mode</label>
-            <select v-model.number="cfg.usb.usbmode" class="text-input">
-              <option :value="0">RNDIS (Windows)</option>
-              <option :value="1">ECM (Linux / macOS)</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Filter rules -->
-        <div class="panel-head" style="margin-top:24px;margin-bottom:12px">
-          <h2 class="panel-title">CAN Filter Rules</h2>
-          <span class="count-badge">{{ activeRuleCount }} active</span>
-        </div>
-        <p class="mode-desc" style="margin-bottom:16px">
-          Rules are evaluated in slot order; first match wins. Set Action to
-          <em>Disabled</em> to skip a slot. Click
-          <strong>Save &amp; Apply Config</strong> (sidebar) to persist and reboot.
-        </p>
-
-        <div v-for="(slot, idx) in RULE_SLOTS" :key="slot" class="rule-card">
-          <div class="rule-card-head">
-            <span class="rule-slot-num">Slot {{ idx }}</span>
-            <select v-model.number="cfg.filters[slot].action" class="text-input rule-action-sel">
-              <option :value="0">Disabled</option>
-              <option :value="1">DROP</option>
-              <option :value="2">REMAP</option>
-              <option :value="3">EVENT</option>
-            </select>
-            <span v-if="cfg.filters[slot].action === 0" class="rule-disabled-lbl">— not active —</span>
-          </div>
-
-          <div v-if="cfg.filters[slot].action !== 0" class="rule-fields-grid">
-            <div class="rule-field">
-              <label class="field-label">CAN ID (hex)</label>
-              <input v-model="cfg.filters[slot].can_id_hex" class="text-input mono" placeholder="00000000"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Mask (hex)</label>
-              <input v-model="cfg.filters[slot].mask_hex" class="text-input mono" placeholder="1FFFFFFF"/>
-            </div>
-
-            <template v-if="cfg.filters[slot].action === 2">
-              <div class="rule-field">
-                <label class="field-label">Remap CAN ID (hex)</label>
-                <input v-model="cfg.filters[slot].remap_id_hex" class="text-input mono" placeholder="00000000"/>
-              </div>
-              <div class="rule-field">
-                <label class="field-label">Remap Payload (hex, opt.)</label>
-                <input v-model="cfg.filters[slot].rpayload_hex" class="text-input mono" placeholder="0000000000000000"/>
-              </div>
-              <div class="rule-field">
-                <label class="field-label">Remap DLC (0=keep)</label>
-                <input v-model.number="cfg.filters[slot].rdlc" type="number" min="0" max="8" class="text-input" style="max-width:90px"/>
-              </div>
-            </template>
-
-            <template v-if="cfg.filters[slot].action === 3">
-              <div class="rule-field">
-                <label class="field-label">Event Logging ID (0–255)</label>
-                <input v-model.number="cfg.filters[slot].event_lid" type="number" min="0" max="255" class="text-input" style="max-width:90px"/>
-              </div>
-            </template>
-          </div>
-        </div>
-
-      </section>
-
-      <!-- RADXA ───────────────────────────────────────────────────────── -->
-      <section v-if="page === 'Radxa'" class="content-panel">
-
-        <!-- Status + WiFi row -->
-        <div class="radxa-top-grid">
-
-          <!-- Status card -->
-          <div class="info-card">
-            <div class="info-card-title">Co-Processor Status</div>
-            <div :class="['device-status', radxa.alive ? 'dev-online' : 'dev-offline']">
-              {{ radxa.alive ? 'ONLINE' : 'OFFLINE' }}
-            </div>
-            <InfoRow label="Heartbeat">
-              <template #val>
-                <span class="ir-value mono">
-                  {{ radxa.alive ? `0x${radxa.heartbeat.toString(16).padStart(2,'0').toUpperCase()}` : '—' }}
-                </span>
-              </template>
-            </InfoRow>
-            <InfoRow label="Version"  :value="radxa.version || '—'"/>
-            <InfoRow label="Uptime"   :value="radxa.uptime ? formatUptime(radxa.uptime) : '—'"/>
-            <InfoRow label="Flags">
-              <template #val>
-                <div style="display:flex;gap:6px">
-                  <span :class="['s-pill', radxa.status & 0x01 ? 's-pill-on' : '']">BOOT</span>
-                  <span :class="['s-pill', radxa.status & 0x02 ? 's-pill-on' : '']">WiFi</span>
-                  <span :class="['s-pill', radxa.status & 0x04 ? 's-pill-on' : '']">FWD</span>
-                </div>
-              </template>
-            </InfoRow>
-          </div>
-
-          <!-- WiFi card -->
-          <div class="info-card">
-            <div class="info-card-title">WiFi</div>
-
-            <div class="ptp-row">
-              <div>
-                <div class="ptp-label">WiFi Radio</div>
-                <div class="ptp-desc">Enable / disable the WiFi radio</div>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="radxaEdit.wifiEnable" @change="radxaSendWifiEnable"/>
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-
-            <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-              <span :class="['wifi-status-dot', wifiStatusClass]"></span>
-              <span class="ptp-desc">{{ wifiStatusText }}</span>
-              <span v-if="radxa.wifi_ip" class="ir-value mono" style="margin-left:auto">{{ radxa.wifi_ip }}</span>
-            </div>
-            <div v-if="radxa.wifi_rssi && radxa.wifi_status >= 1" class="ptp-desc" style="margin-top:4px">
-              RSSI: {{ radxa.wifi_rssi }} dBm
-            </div>
-
-            <div style="height:1px;background:var(--border);margin:14px 0"></div>
-
-            <div class="rule-field">
-              <label class="field-label">SSID</label>
-              <input v-model="radxaEdit.ssid" class="text-input" placeholder="MyNetwork" autocomplete="off"/>
-            </div>
-            <div class="rule-field" style="margin-top:8px">
-              <label class="field-label">Password</label>
-              <input v-model="radxaEdit.password" type="password" class="text-input" placeholder="••••••••" autocomplete="new-password"/>
-            </div>
-            <button class="btn btn-primary" style="margin-top:10px" @click="radxaWifiConnect">
-              Connect
-            </button>
-            <div v-if="radxaEdit.wifiResult"
-                 :class="['inject-result', radxaEdit.wifiOk ? 'inject-ok' : 'inject-err']"
-                 style="margin-top:8px">
-              {{ radxaEdit.wifiResult }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Data forwarding card -->
-        <div class="cfg-card" style="margin-top:16px">
-          <div class="info-card-title">CLOG Data Forwarding</div>
-          <p class="mode-desc" style="margin:8px 0 16px">
-            When enabled, Radxa receives CLOG frames on the USB ECM link and
-            relays them to the destination over WiFi.
-          </p>
-
-          <div class="ptp-row" style="margin-bottom:16px">
-            <div>
-              <div class="ptp-label">Forwarding</div>
-              <div class="ptp-desc">{{ radxaEdit.dataEnable ? 'Active — relaying CLOG frames via WiFi' : 'Inactive' }}</div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="radxaEdit.dataEnable"/>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="cfg-grid" style="margin-top:0">
-            <div class="rule-field">
-              <label class="field-label">Destination IP</label>
-              <input v-model="radxaEdit.destIp" class="text-input mono" placeholder="192.168.1.10"/>
-            </div>
-            <div class="rule-field">
-              <label class="field-label">Destination Port</label>
-              <input v-model.number="radxaEdit.destPort" type="number" min="1" max="65535" class="text-input"/>
-            </div>
-          </div>
-
-          <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-            <button class="btn btn-primary" style="max-width:160px" @click="radxaApplyData">
-              Apply
-            </button>
-            <div v-if="radxaEdit.dataResult"
-                 :class="['inject-result', radxaEdit.dataOk ? 'inject-ok' : 'inject-err']">
-              {{ radxaEdit.dataResult }}
-            </div>
-          </div>
-
-          <div class="radxa-stats-row" style="margin-top:20px">
-            <div class="radxa-stat">
-              <div class="radxa-stat-val">{{ radxa.pkts_fwd.toLocaleString() }}</div>
-              <div class="radxa-stat-label">Forwarded</div>
-            </div>
-            <div class="radxa-stat" :class="{ 'radxa-stat-warn': radxa.pkts_drop > 0 }">
-              <div class="radxa-stat-val">{{ radxa.pkts_drop.toLocaleString() }}</div>
-              <div class="radxa-stat-label">Dropped</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Power card -->
-        <div class="boot-card" style="margin-top:16px;max-width:none">
-          <div class="boot-card-title">Power Control</div>
-
-          <template v-if="radxaRebootState === 'idle'">
-            <p class="boot-desc">Reboot the Radxa co-processor. The USB ECM link will drop for ~15 seconds.</p>
-            <button class="btn btn-danger boot-btn" style="max-width:200px;margin-top:4px"
-                    :disabled="!radxa.alive" @click="radxaRebootState = 'confirming'">
-              ↺ Reboot Radxa
-            </button>
-          </template>
-
-          <template v-else-if="radxaRebootState === 'confirming'">
-            <p class="boot-warn">⚠ Radxa will reboot immediately. The connection will drop for ~15 s.</p>
-            <div class="boot-row" style="margin-top:10px">
-              <button class="btn btn-danger  boot-btn-half" @click="doRadxaReboot">Confirm</button>
-              <button class="btn btn-neutral boot-btn-half" @click="radxaRebootState = 'idle'">Cancel</button>
-            </div>
-          </template>
-
-          <template v-else-if="radxaRebootState === 'sending'">
-            <div class="boot-spinner-row">
-              <div class="boot-spinner"></div>
-              <span class="boot-sending-txt">Sending reboot command…</span>
-            </div>
-          </template>
-
-          <template v-else-if="radxaRebootState === 'done'">
-            <p class="boot-ok">✓ Reboot command sent. Radxa is restarting.</p>
-            <button class="btn btn-neutral boot-btn" style="max-width:160px;margin-top:10px"
-                    @click="radxaRebootState = 'idle'">Dismiss</button>
-          </template>
-
-          <template v-else-if="radxaRebootState === 'error'">
-            <p class="boot-err">✕ Failed to send reboot command.</p>
-            <button class="btn btn-neutral boot-btn" style="max-width:160px;margin-top:10px"
-                    @click="radxaRebootState = 'idle'">Retry</button>
-          </template>
-        </div>
-
-      </section>
-
+      <TopBar :page="page" :system="system" />
+
+      <GaugesPage v-if="page === 'Gauges'" :smooth="smooth" :telemetry="telemetry" />
+      <DiagnosticsPage v-else-if="page === 'Diagnostics'" :dtc="dtc" :severityClass="severityClass" />
+      <ControlsPage
+        v-else-if="page === 'Controls'"
+        :throttle="throttle"
+        :tx="tx"
+        @update:throttle="val => throttle.value = val"
+        @update:tx="val => Object.assign(tx, val)"
+        @send-throttle="sendThrottle"
+        @send-control="send"
+        @send-frame="sendCanFrame"
+      />
+      <NodesPage v-else-if="page === 'Nodes'" :nodes="nodes" />
+      <SystemInfoPage v-else-if="page === 'System Info'" :system="system" :cfg="cfg" :formatUptime="formatUptime" />
+      <LoggingPage v-else-if="page === 'Logging'" :cfg="cfg" :system="system" @open-channel="openChanPopup" />
+      <CANBusPage
+        v-else-if="page === 'CAN Bus'"
+        :cfg="cfg"
+        :nomBitrate="nomBitrate"
+        :nomSamplePt="nomSamplePt"
+        :dataBitrate="dataBitrate"
+        :dataSamplePt="dataSamplePt"
+        @apply-nom-preset="applyNomPreset"
+        @apply-data-preset="applyDataPreset"
+      />
+      <CANReplayPage v-else-if="page === 'CAN Replay'" :inject="inject" :injectDlc="injectDlc" :system="system" @send-can-frame="sendCanFrame" />
+      <FilteringPage v-else-if="page === 'Filtering'" :cfg="cfg" :RULE_SLOTS="RULE_SLOTS" :activeRuleCount="activeRuleCount" />
+      <RadxaPage
+        v-else-if="page === 'Wifi'"
+        :radxa="radxa"
+        :radxaEdit="radxaEdit"
+        :wifiStatusText="wifiStatusText"
+        :wifiStatusClass="wifiStatusClass"
+        :formatUptime="formatUptime"
+        :radxaRebootState="radxaRebootState"
+        @wifi-toggle="radxaSendWifiEnable"
+        @wifi-connect="radxaWifiConnect"
+        @apply-data="radxaApplyData"
+        @request-reboot="requestRadxaReboot"
+        @confirm-reboot="doRadxaReboot"
+        @cancel-reboot="cancelRadxaReboot"
+        @reset-reboot-state="resetRadxaRebootState"
+      />
     </main>
   </div>
 
-  <!-- ── Channel config popup ─────────────────────────────────────────── -->
-  <Teleport to="body">
-    <div v-if="chanPopup.open" class="popup-overlay" @click.self="chanPopup.open = false">
-      <div class="popup-card">
-        <div class="popup-header">
-          <span class="popup-title">CAN Channel {{ chanPopup.ch }}</span>
-          <button class="popup-close" @click="chanPopup.open = false">✕</button>
-        </div>
-
-        <label class="field-label" style="display:block;margin-bottom:6px">Logging ID (0–255)</label>
-        <input v-model.number="popupEdit.logging_id" type="number" min="0" max="255"
-               class="text-input" style="width:120px"/>
-        <p class="mode-desc" style="margin-top:4px;margin-bottom:20px">
-          This ID is embedded in every forwarded frame so the host can identify the source channel.
-        </p>
-
-        <label class="field-label" style="display:block;margin-bottom:10px">Logging Target</label>
-        <div class="target-row">
-          <button :class="['target-btn', { 'target-active': popupEdit.target === 0 }]"
-                  @click="popupEdit.target = 0">
-            <span class="target-icon">🌐</span>
-            <span class="target-name">Ethernet</span>
-          </button>
-          <button :class="['target-btn', { 'target-active': popupEdit.target === 1 }]"
-                  @click="popupEdit.target = 1">
-            <span class="target-icon">🔌</span>
-            <span class="target-name">USB ECM</span>
-          </button>
-          <button class="target-btn target-disabled" disabled title="Coming soon">
-            <span class="target-icon">🔷</span>
-            <span class="target-name">Bluetooth</span>
-            <span class="target-soon">Soon</span>
-          </button>
-        </div>
-
-        <label class="field-label" style="display:block;margin:20px 0 6px">Logging</label>
-        <select v-model.number="popupEdit.enabled" class="text-input" style="width:160px">
-          <option :value="1">Enabled</option>
-          <option :value="0">Disabled</option>
-        </select>
-
-        <div class="popup-actions">
-          <button class="preset-btn" style="background:var(--primary);color:#fff;border-color:var(--primary)"
-                  @click="saveChanPopup">Apply</button>
-          <button class="preset-btn" @click="chanPopup.open = false">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+    <ChannelConfigPopup
+      :chanPopup="chanPopup"
+      :popupEdit="popupEdit"
+      @close="chanPopup.open = false"
+      @apply="saveChanPopup"
+    />
 </template>
 
 <script setup>
-import { reactive, ref, computed, onMounted, watch, nextTick } from "vue"
+import { reactive, ref, computed, onMounted } from "vue"
 import axios from "axios"
+import Sidebar from "./components/views/Sidebar.vue"
+import TopBar from "./components/views/TopBar.vue"
+import GaugesPage from "./pages/GaugesPage.vue"
+import DiagnosticsPage from "./pages/DiagnosticsPage.vue"
+import ControlsPage from "./pages/ControlsPage.vue"
+import NodesPage from "./pages/NodesPage.vue"
+import SystemInfoPage from "./pages/SystemInfoPage.vue"
+import LoggingPage from "./pages/LoggingPage.vue"
+import CANBusPage from "./pages/CANBusPage.vue"
+import CANReplayPage from "./pages/CANReplayPage.vue"
+import FilteringPage from "./pages/FilteringPage.vue"
+import RadxaPage from "./pages/RadxaPage.vue"
+import ChannelConfigPopup from "./components/views/ChannelConfigPopup.vue"
+import Button from "./components/ui/Button.vue"
 
 // ── Config ────────────────────────────────────────────────────────────────────
 // Empty string → relative URLs; page is served by the MCU itself so all
 // API calls go to the same host regardless of which interface (ETH or USB) is used.
 const MCU   = ""
-const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙', Radxa:'🤖' }
+const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙', Wifi:'📶' }
 const RULE_SLOTS = ['r0','r1','r2','r3','r4','r5','r6','r7']
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering", "Radxa"]
+const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering", "Wifi"]
 const page  = ref("Gauges")
+const sidebarCollapsed = ref(false)
 
 // ── Reactive state ────────────────────────────────────────────────────────────
 const telemetry = reactive({
@@ -1197,7 +306,12 @@ function formatUptime(s) {
   return `${sec}s`
 }
 function send(obj)    { console.log('J1939 TX:', obj) }
-function sendThrottle() { send({ type: 'control', throttle: throttle.value }) }
+function sendThrottle(value = throttle.value) {
+  if (value !== undefined) {
+    throttle.value = value
+  }
+  send({ type: 'control', throttle: throttle.value })
+}
 
 function parseIp(s) {
   return (s || '0.0.0.0').split('.').map(n => Math.max(0, Math.min(255, parseInt(n)||0)))
@@ -1570,6 +684,18 @@ async function doRadxaReboot() {
   }
 }
 
+function requestRadxaReboot() {
+  radxaRebootState.value = 'confirming'
+}
+
+function cancelRadxaReboot() {
+  radxaRebootState.value = 'idle'
+}
+
+function resetRadxaRebootState() {
+  radxaRebootState.value = 'idle'
+}
+
 onMounted(() => {
   fetchTelemetry(); fetchDTC(); fetchNodes(); fetchSystemInfo(); fetchConfig(); fetchRadxa()
   setInterval(fetchTelemetry,  200)
@@ -1682,141 +808,9 @@ body {
 .app  { display: flex; height: 100vh; }
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────────── */
-.sidebar {
-  width: 220px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 20px 12px;
-  gap: 4px;
-  flex-shrink: 0;
-}
+/* hide mobile-only toggle by default; shown only in mobile media query */
+.mobile-collapse-toggle { display: none !important; height: auto; }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 8px 16px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 8px;
-}
-.brand-icon { font-size: 26px; }
-.brand-name { font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
-.brand-sub  { font-size: 11px; color: var(--muted); margin-top: 1px; }
-
-/* ── Save & Apply button ─────────────────────────────────────────────────── */
-.save-btn {
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  margin-bottom: 12px;
-  transition: opacity 0.15s, background 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.save-idle  { background: var(--primary); color: #fff; }
-.save-idle:hover { opacity: 0.88; }
-.save-saving    { background: var(--dim); color: var(--muted); cursor: not-allowed; }
-.save-rebooting { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.35); cursor: not-allowed; }
-.save-done  { background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
-.save-error { background: rgba(239,68,68,0.2);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
-.save-default { background: var(--dim); color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
-.save-default:hover { color: var(--text); border-color: var(--warning); }
-
-.default-confirm {
-  background: rgba(245,158,11,0.08);
-  border: 1px solid rgba(245,158,11,0.35);
-  border-radius: var(--radius-sm);
-  padding: 10px;
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.default-warn { font-size: 12px; color: #fbbf24; line-height: 1.4; }
-.default-row  { display: flex; gap: 6px; }
-.btn-half     { flex: 1; padding: 7px 4px; border: none; border-radius: var(--radius-sm); font-size: 12px; font-weight: 700; cursor: pointer; }
-.btn-danger-sm  { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
-.btn-danger-sm:hover  { background: rgba(239,68,68,0.35); }
-.btn-neutral-sm { background: var(--dim); color: var(--muted); border: 1px solid var(--border); }
-.btn-neutral-sm:hover { color: var(--text); }
-
-.save-spinner-row { display: flex; align-items: center; gap: 8px; }
-.save-spin {
-  width: 14px; height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  flex-shrink: 0;
-}
-
-.nav { display: flex; flex-direction: column; gap: 2px; }
-
-.nav-btn {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  border-left: 3px solid transparent;
-  text-align: left;
-}
-.nav-btn:hover { background: var(--dim); color: var(--text); }
-.nav-btn.active {
-  background: rgba(59,130,246,0.12);
-  color: #60a5fa;
-  border-left-color: var(--primary);
-}
-.nav-icon  { font-size: 16px; width: 20px; text-align: center; }
-.nav-label { flex: 1; }
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 12px;
-  background: var(--dim);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.live-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  color: var(--success);
-}
-.live-dot {
-  width: 8px; height: 8px;
-  background: var(--success);
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
-  50%       { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
-}
-.uptime-label { font-size: 11px; color: var(--muted); }
-
-/* ── Topbar ──────────────────────────────────────────────────────────────── */
 .topbar {
   display: flex;
   align-items: center;
@@ -2159,39 +1153,6 @@ code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: va
 .leg-item { display: flex; align-items: center; gap: 8px; }
 
 /* ── Channel config popup ────────────────────────────────────────────────── */
-.popup-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 9999;
-}
-.popup-card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 28px 28px 24px;
-  width: 420px; max-width: 95vw;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.6);
-}
-.popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.popup-title { font-size: 17px; font-weight: 700; color: var(--text); }
-.popup-close {
-  background: none; border: none; color: var(--muted); font-size: 16px;
-  cursor: pointer; padding: 4px 8px; border-radius: 6px;
-  transition: color 0.15s;
-}
-.popup-close:hover { color: var(--text); }
-.target-row { display: flex; gap: 10px; }
-.target-btn {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  gap: 6px; padding: 12px 8px; border-radius: var(--radius-sm);
-  border: 2px solid var(--border); background: var(--dim);
-  color: var(--text); cursor: pointer; transition: border-color 0.15s, background 0.15s;
-}
-.target-btn:hover:not(:disabled) { border-color: var(--primary); }
-.target-active { border-color: var(--primary) !important; background: #0d2244 !important; }
-.target-disabled { opacity: 0.38; cursor: not-allowed !important; }
-.target-icon { font-size: 22px; }
-.target-name { font-size: 12px; font-weight: 600; }
-.target-soon { font-size: 10px; color: var(--muted); }
-.popup-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
 
 /* ── Radxa page ──────────────────────────────────────────────────────────── */
 .radxa-top-grid {
@@ -2222,4 +1183,61 @@ code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: va
 .radxa-stat-val  { font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .radxa-stat-warn .radxa-stat-val { color: #f87171; }
 .radxa-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-top: 4px; }
+
+@media (max-width: 900px) {
+  .app { flex-direction: column; }
+  .main {
+    width: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+  }
+  /* mobile toggle placed outside sidebar so fixed positioning is relative to viewport */
+  .mobile-collapse-toggle {
+    position: fixed;
+    top: 14px;
+    left: calc(min(360px, 92vw) - 44px);
+    display: inline-flex !important;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: rgba(0,0,0,0.95);
+    color: #fff;
+    border: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1300;
+    font-size: 18px;
+    transition: left 0.28s cubic-bezier(.2,.9,.2,1), background 0.18s;
+  }
+  .mobile-collapse-toggle.collapsed {
+    left: 12px;
+    background: rgba(0,0,0,1);
+    width: 56px; height: 56px; border-radius: 12px; font-size: 20px;
+  }
+
+  .brand {
+    width: 100%;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+  .save-btn,
+  .save-default { width: 100%; }
+  .nav { flex-direction: row; flex-wrap: wrap; gap: 8px; width: 100%; }
+  .nav-btn { flex: 1 1 calc(50% - 8px); }
+  .sidebar-footer {
+    width: 100%;
+    margin-top: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    justify-content: space-between;
+  }
+  .topbar { padding: 14px 16px; gap: 10px; }
+}
+
+@media (max-width: 700px) {
+  .nav-btn { flex: 1 1 100%; }
+  .topbar { padding: 12px 14px; }
+}
 </style>
