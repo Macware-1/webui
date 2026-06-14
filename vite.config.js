@@ -11,5 +11,11 @@ export default defineConfig({
     outDir: 'dist',
     cssCodeSplit: false,
   },
-  base: './'
+  base: './',
+  server: {
+    // Forward all /api/* requests to the mock backend (node mocks/server.js)
+    proxy: {
+      '/api': 'http://localhost:3001'
+    }
+  }
 })

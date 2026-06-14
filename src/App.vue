@@ -260,6 +260,43 @@
           </p>
         </div>
 
+        <!-- Radxa CLOG Forwarding -->
+        <div class="ptp-card">
+          <div class="boot-card-title">Radxa WiFi CLOG Forwarding</div>
+          <div class="ptp-row">
+            <div>
+              <div class="ptp-label">{{ cfg.board.radxa_fwd_enable ? 'Enabled' : 'Disabled' }}</div>
+              <div class="ptp-desc">
+                {{ cfg.board.radxa_fwd_enable
+                   ? 'Radxa will forward CLOG packets to the configured destination over WiFi'
+                   : 'CLOG forwarding via Radxa is off' }}
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="cfg.board.radxa_fwd_enable" :true-value="1" :false-value="0"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="cfg-grid" style="margin-top:10px">
+            <div class="rule-field">
+              <label class="field-label">Destination IP</label>
+              <input v-model="cfg.board.radxa_dest_ip" class="text-input mono" placeholder="192.168.1.100"
+                     :disabled="!cfg.board.radxa_fwd_enable"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Destination Port</label>
+              <input v-model.number="cfg.board.radxa_dest_port" type="number" min="1" max="65535"
+                     class="text-input mono" placeholder="47808"
+                     :disabled="!cfg.board.radxa_fwd_enable"/>
+            </div>
+          </div>
+          <p class="boot-desc" style="margin-top:6px">
+            Enter your PC's WiFi IP address. CLOG packets arrive on UDP port 47808 (same as wired).
+            Configure Radxa WiFi first via <code>nmcli</code> on the Radxa.
+            Takes effect after <strong>Save &amp; Apply Config</strong>.
+          </p>
+        </div>
+
         <div class="boot-card">
           <div class="boot-card-title">Firmware Update</div>
 
@@ -532,6 +569,13 @@
                 <option :value="0">Disabled</option>
               </select>
             </div>
+            <div class="rule-field">
+              <label class="field-label">ACK Mode</label>
+              <select v-model.number="cfg.can.listen_only" class="text-input">
+                <option :value="0">Active (ACK frames)</option>
+                <option :value="1">Listen-only (no ACK, passive)</option>
+              </select>
+            </div>
           </div>
           <p class="mode-desc" style="margin-top:8px">
             Click <strong>Save &amp; Apply Config</strong> in the sidebar to write these settings to flash and reboot.
@@ -684,6 +728,7 @@
               <option :value="0">Disabled</option>
               <option :value="1">DROP</option>
               <option :value="2">REMAP</option>
+              <option :value="3">EVENT</option>
             </select>
             <span v-if="cfg.filters[slot].action === 0" class="rule-disabled-lbl">— not active —</span>
           </div>
@@ -712,7 +757,185 @@
                 <input v-model.number="cfg.filters[slot].rdlc" type="number" min="0" max="8" class="text-input" style="max-width:90px"/>
               </div>
             </template>
+
+            <template v-if="cfg.filters[slot].action === 3">
+              <div class="rule-field">
+                <label class="field-label">Event Logging ID (0–255)</label>
+                <input v-model.number="cfg.filters[slot].event_lid" type="number" min="0" max="255" class="text-input" style="max-width:90px"/>
+              </div>
+            </template>
           </div>
+        </div>
+
+      </section>
+
+      <!-- RADXA ───────────────────────────────────────────────────────── -->
+      <section v-if="page === 'Radxa'" class="content-panel">
+
+        <!-- Status + WiFi row -->
+        <div class="radxa-top-grid">
+
+          <!-- Status card -->
+          <div class="info-card">
+            <div class="info-card-title">Co-Processor Status</div>
+            <div :class="['device-status', radxa.alive ? 'dev-online' : 'dev-offline']">
+              {{ radxa.alive ? 'ONLINE' : 'OFFLINE' }}
+            </div>
+            <InfoRow label="Heartbeat">
+              <template #val>
+                <span class="ir-value mono">
+                  {{ radxa.alive ? `0x${radxa.heartbeat.toString(16).padStart(2,'0').toUpperCase()}` : '—' }}
+                </span>
+              </template>
+            </InfoRow>
+            <InfoRow label="Version"  :value="radxa.version || '—'"/>
+            <InfoRow label="Uptime"   :value="radxa.uptime ? formatUptime(radxa.uptime) : '—'"/>
+            <InfoRow label="Flags">
+              <template #val>
+                <div style="display:flex;gap:6px">
+                  <span :class="['s-pill', radxa.status & 0x01 ? 's-pill-on' : '']">BOOT</span>
+                  <span :class="['s-pill', radxa.status & 0x02 ? 's-pill-on' : '']">WiFi</span>
+                  <span :class="['s-pill', radxa.status & 0x04 ? 's-pill-on' : '']">FWD</span>
+                </div>
+              </template>
+            </InfoRow>
+          </div>
+
+          <!-- WiFi card -->
+          <div class="info-card">
+            <div class="info-card-title">WiFi</div>
+
+            <div class="ptp-row">
+              <div>
+                <div class="ptp-label">WiFi Radio</div>
+                <div class="ptp-desc">Enable / disable the WiFi radio</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="radxaEdit.wifiEnable" @change="radxaSendWifiEnable"/>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+              <span :class="['wifi-status-dot', wifiStatusClass]"></span>
+              <span class="ptp-desc">{{ wifiStatusText }}</span>
+              <span v-if="radxa.wifi_ip" class="ir-value mono" style="margin-left:auto">{{ radxa.wifi_ip }}</span>
+            </div>
+            <div v-if="radxa.wifi_rssi && radxa.wifi_status >= 1" class="ptp-desc" style="margin-top:4px">
+              RSSI: {{ radxa.wifi_rssi }} dBm
+            </div>
+
+            <div style="height:1px;background:var(--border);margin:14px 0"></div>
+
+            <div class="rule-field">
+              <label class="field-label">SSID</label>
+              <input v-model="radxaEdit.ssid" class="text-input" placeholder="MyNetwork" autocomplete="off"/>
+            </div>
+            <div class="rule-field" style="margin-top:8px">
+              <label class="field-label">Password</label>
+              <input v-model="radxaEdit.password" type="password" class="text-input" placeholder="••••••••" autocomplete="new-password"/>
+            </div>
+            <button class="btn btn-primary" style="margin-top:10px" @click="radxaWifiConnect">
+              Connect
+            </button>
+            <div v-if="radxaEdit.wifiResult"
+                 :class="['inject-result', radxaEdit.wifiOk ? 'inject-ok' : 'inject-err']"
+                 style="margin-top:8px">
+              {{ radxaEdit.wifiResult }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Data forwarding card -->
+        <div class="cfg-card" style="margin-top:16px">
+          <div class="info-card-title">CLOG Data Forwarding</div>
+          <p class="mode-desc" style="margin:8px 0 16px">
+            When enabled, Radxa receives CLOG frames on the USB ECM link and
+            relays them to the destination over WiFi.
+          </p>
+
+          <div class="ptp-row" style="margin-bottom:16px">
+            <div>
+              <div class="ptp-label">Forwarding</div>
+              <div class="ptp-desc">{{ radxaEdit.dataEnable ? 'Active — relaying CLOG frames via WiFi' : 'Inactive' }}</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="radxaEdit.dataEnable"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="cfg-grid" style="margin-top:0">
+            <div class="rule-field">
+              <label class="field-label">Destination IP</label>
+              <input v-model="radxaEdit.destIp" class="text-input mono" placeholder="192.168.1.10"/>
+            </div>
+            <div class="rule-field">
+              <label class="field-label">Destination Port</label>
+              <input v-model.number="radxaEdit.destPort" type="number" min="1" max="65535" class="text-input"/>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+            <button class="btn btn-primary" style="max-width:160px" @click="radxaApplyData">
+              Apply
+            </button>
+            <div v-if="radxaEdit.dataResult"
+                 :class="['inject-result', radxaEdit.dataOk ? 'inject-ok' : 'inject-err']">
+              {{ radxaEdit.dataResult }}
+            </div>
+          </div>
+
+          <div class="radxa-stats-row" style="margin-top:20px">
+            <div class="radxa-stat">
+              <div class="radxa-stat-val">{{ radxa.pkts_fwd.toLocaleString() }}</div>
+              <div class="radxa-stat-label">Forwarded</div>
+            </div>
+            <div class="radxa-stat" :class="{ 'radxa-stat-warn': radxa.pkts_drop > 0 }">
+              <div class="radxa-stat-val">{{ radxa.pkts_drop.toLocaleString() }}</div>
+              <div class="radxa-stat-label">Dropped</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Power card -->
+        <div class="boot-card" style="margin-top:16px;max-width:none">
+          <div class="boot-card-title">Power Control</div>
+
+          <template v-if="radxaRebootState === 'idle'">
+            <p class="boot-desc">Reboot the Radxa co-processor. The USB ECM link will drop for ~15 seconds.</p>
+            <button class="btn btn-danger boot-btn" style="max-width:200px;margin-top:4px"
+                    :disabled="!radxa.alive" @click="radxaRebootState = 'confirming'">
+              ↺ Reboot Radxa
+            </button>
+          </template>
+
+          <template v-else-if="radxaRebootState === 'confirming'">
+            <p class="boot-warn">⚠ Radxa will reboot immediately. The connection will drop for ~15 s.</p>
+            <div class="boot-row" style="margin-top:10px">
+              <button class="btn btn-danger  boot-btn-half" @click="doRadxaReboot">Confirm</button>
+              <button class="btn btn-neutral boot-btn-half" @click="radxaRebootState = 'idle'">Cancel</button>
+            </div>
+          </template>
+
+          <template v-else-if="radxaRebootState === 'sending'">
+            <div class="boot-spinner-row">
+              <div class="boot-spinner"></div>
+              <span class="boot-sending-txt">Sending reboot command…</span>
+            </div>
+          </template>
+
+          <template v-else-if="radxaRebootState === 'done'">
+            <p class="boot-ok">✓ Reboot command sent. Radxa is restarting.</p>
+            <button class="btn btn-neutral boot-btn" style="max-width:160px;margin-top:10px"
+                    @click="radxaRebootState = 'idle'">Dismiss</button>
+          </template>
+
+          <template v-else-if="radxaRebootState === 'error'">
+            <p class="boot-err">✕ Failed to send reboot command.</p>
+            <button class="btn btn-neutral boot-btn" style="max-width:160px;margin-top:10px"
+                    @click="radxaRebootState = 'idle'">Retry</button>
+          </template>
         </div>
 
       </section>
@@ -779,11 +1002,11 @@ import axios from "axios"
 // Empty string → relative URLs; page is served by the MCU itself so all
 // API calls go to the same host regardless of which interface (ETH or USB) is used.
 const MCU   = ""
-const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙' }
+const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙', Radxa:'🤖' }
 const RULE_SLOTS = ['r0','r1','r2','r3','r4','r5','r6','r7']
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering"]
+const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering", "Radxa"]
 const page  = ref("Gauges")
 
 // ── Reactive state ────────────────────────────────────────────────────────────
@@ -807,6 +1030,30 @@ const throttle = ref(0)
 const tx       = reactive({ pgn: '', data: '' })
 const bootState = ref('idle')
 const bootMsg   = ref('')
+
+// ── Radxa state ────────────────────────────────────────────────────────────────
+const radxa = reactive({
+  alive: false, heartbeat: 0, status: 0, version: '', uptime: 0,
+  wifi_status: 0, wifi_ip: '', wifi_rssi: 0, wifi_enable: false,
+  data_enable: false, dest_ip: '', dest_port: 47808,
+  pkts_fwd: 0, pkts_drop: 0,
+})
+const radxaEdit = reactive({
+  wifiEnable: false, ssid: '', password: '',
+  wifiResult: '', wifiOk: false,
+  dataEnable: false, destIp: '', destPort: 47808,
+  dataResult: '', dataOk: false,
+})
+const radxaRebootState = ref('idle')
+
+const wifiStatusText = computed(() =>
+  (['Off / Down', 'Connecting…', 'Connected', 'Hotspot'])[radxa.wifi_status] ?? 'Unknown'
+)
+const wifiStatusClass = computed(() => {
+  if (radxa.wifi_status === 2) return 'wifi-dot-connected'
+  if (radxa.wifi_status === 1) return 'wifi-dot-connecting'
+  return 'wifi-dot-down'
+})
 
 // ── CAN Replay state ──────────────────────────────────────────────────────────
 const inject = reactive({ id: '0x123', data: '0102030405060708', fd: false, brs: false, sending: false, result: '', ok: false })
@@ -850,14 +1097,16 @@ const defaultState = ref('idle')   // idle | confirming
 // ── Local config (mirrors Config container structure) ─────────────────────────
 function makeRule() {
   return { action: 0, can_id_hex: '00000000', mask_hex: '1FFFFFFF',
-           remap_id_hex: '00000000', rpayload_hex: '0000000000000000', rdlc: 0 }
+           remap_id_hex: '00000000', rpayload_hex: '0000000000000000', rdlc: 0,
+           event_lid: 0 }
 }
 const cfg = reactive({
-  board: { eth_ip: '10.104.3.64', eth_mask: '255.255.255.0', eth_gw: '10.104.3.1', usb_ip: '192.168.7.64', ptp_enable: 0 },
+  board: { eth_ip: '10.104.3.64', eth_mask: '255.255.255.0', eth_gw: '10.104.3.1', usb_ip: '192.168.7.64', ptp_enable: 0,
+           radxa_fwd_enable: 0, radxa_dest_ip: '0.0.0.0', radxa_dest_port: 47808 },
   can:   { j1939: 0, dlc: 8, id_hex: '00000000',
            nbrp: 2, ntseg1: 59, ntseg2: 20, nsjw: 20,
            dbrp: 2, dtseg1: 15, dtseg2: 4,  dsjw: 4,
-           fd_mode: 1, brs: 1 },
+           fd_mode: 1, brs: 1, listen_only: 0 },
   logging: {
     ch1: { enabled: 0, logging_id: 0, target: 0 },
     ch2: { enabled: 0, logging_id: 0, target: 0 }
@@ -1056,7 +1305,10 @@ function applyDecodedConfig(d) {
     if (d.board.eth_mask)          cfg.board.eth_mask  = fmtIp(d.board.eth_mask)
     if (d.board.eth_gw)            cfg.board.eth_gw    = fmtIp(d.board.eth_gw)
     if (d.board.usb_ip)            cfg.board.usb_ip    = fmtIp(d.board.usb_ip)
-    if (d.board.ptp_enable !== undefined) cfg.board.ptp_enable = d.board.ptp_enable
+    if (d.board.ptp_enable       !== undefined) cfg.board.ptp_enable       = d.board.ptp_enable
+    if (d.board.radxa_fwd_enable !== undefined) cfg.board.radxa_fwd_enable = d.board.radxa_fwd_enable
+    if (d.board.radxa_dest_ip)                  cfg.board.radxa_dest_ip    = fmtIp(d.board.radxa_dest_ip)
+    if (d.board.radxa_dest_port  !== undefined) cfg.board.radxa_dest_port  = d.board.radxa_dest_port
   }
   if (d.can) {
     if (d.can.j1939    !== undefined) cfg.can.j1939   = d.can.j1939
@@ -1070,8 +1322,9 @@ function applyDecodedConfig(d) {
     if (d.can.dtseg1   !== undefined) cfg.can.dtseg1  = d.can.dtseg1
     if (d.can.dtseg2   !== undefined) cfg.can.dtseg2  = d.can.dtseg2
     if (d.can.dsjw     !== undefined) cfg.can.dsjw    = d.can.dsjw
-    if (d.can.fd_mode  !== undefined) cfg.can.fd_mode = d.can.fd_mode
-    if (d.can.brs      !== undefined) cfg.can.brs     = d.can.brs
+    if (d.can.fd_mode     !== undefined) cfg.can.fd_mode     = d.can.fd_mode
+    if (d.can.brs         !== undefined) cfg.can.brs         = d.can.brs
+    if (d.can.listen_only !== undefined) cfg.can.listen_only = d.can.listen_only
   }
   if (d.usb && d.usb.usbmode !== undefined) cfg.usb.usbmode = d.usb.usbmode
   if (d.logging) {
@@ -1095,6 +1348,7 @@ function applyDecodedConfig(d) {
       fc.rdlc        = r.rdlc ?? 0
       fc.rpayload_hex= (r.rpayload ?? [0,0,0,0,0,0,0,0])
                         .map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase()
+      fc.event_lid   = r.event_lid ?? 0
     }
   }
 }
@@ -1108,19 +1362,23 @@ function buildConfigPayload() {
       can_id:   parseHex32(fc.can_id_hex),
       mask:     parseHex32(fc.mask_hex),
       remap_id: parseHex32(fc.remap_id_hex),
-      action:   fc.action,
-      rflags:   (fc.action === 2 ? ((fc.remap_id_hex !== '00000000' ? 1 : 0) | (fc.rpayload_hex && fc.rpayload_hex !== '0000000000000000' ? 2 : 0)) : 0),
-      rdlc:     fc.rdlc,
-      rpayload: parseHexBytes(fc.rpayload_hex, 8)
+      action:    fc.action,
+      rflags:    (fc.action === 2 ? ((fc.remap_id_hex !== '00000000' ? 1 : 0) | (fc.rpayload_hex && fc.rpayload_hex !== '0000000000000000' ? 2 : 0)) : 0),
+      rdlc:      fc.rdlc,
+      rpayload:  parseHexBytes(fc.rpayload_hex, 8),
+      event_lid: fc.event_lid ?? 0
     }
   }
   return {
     board: {
-      eth_ip:     parseIp(cfg.board.eth_ip),
-      eth_mask:   parseIp(cfg.board.eth_mask),
-      eth_gw:     parseIp(cfg.board.eth_gw),
-      usb_ip:     parseIp(cfg.board.usb_ip),
-      ptp_enable: cfg.board.ptp_enable
+      eth_ip:          parseIp(cfg.board.eth_ip),
+      eth_mask:        parseIp(cfg.board.eth_mask),
+      eth_gw:          parseIp(cfg.board.eth_gw),
+      usb_ip:          parseIp(cfg.board.usb_ip),
+      ptp_enable:      cfg.board.ptp_enable,
+      radxa_fwd_enable: cfg.board.radxa_fwd_enable,
+      radxa_dest_ip:   parseIp(cfg.board.radxa_dest_ip),
+      radxa_dest_port: cfg.board.radxa_dest_port
     },
     can: {
       dlc:    cfg.can.dlc,
@@ -1134,8 +1392,9 @@ function buildConfigPayload() {
       dtseg1: cfg.can.dtseg1,
       dtseg2: cfg.can.dtseg2,
       dsjw:   cfg.can.dsjw,
-      fd_mode:cfg.can.fd_mode,
-      brs:    cfg.can.brs
+      fd_mode:    cfg.can.fd_mode,
+      brs:        cfg.can.brs,
+      listen_only:cfg.can.listen_only
     },
     usb:     { usbmode: cfg.usb.usbmode },
     logging: {
@@ -1180,17 +1439,20 @@ async function saveAndApply() {
 
 // ── Reset to Defaults ─────────────────────────────────────────────────────────
 function applyDefaults() {
-  cfg.board.eth_ip     = '10.104.3.64'
-  cfg.board.eth_mask   = '255.255.255.0'
-  cfg.board.eth_gw     = '10.104.3.1'
-  cfg.board.usb_ip     = '192.168.7.64'
-  cfg.board.ptp_enable = 0
+  cfg.board.eth_ip          = '10.104.3.64'
+  cfg.board.eth_mask        = '255.255.255.0'
+  cfg.board.eth_gw          = '10.104.3.1'
+  cfg.board.usb_ip          = '192.168.7.64'
+  cfg.board.ptp_enable      = 0
+  cfg.board.radxa_fwd_enable = 0
+  cfg.board.radxa_dest_ip   = '0.0.0.0'
+  cfg.board.radxa_dest_port = 47808
   cfg.can.j1939   = 0
   cfg.can.dlc     = 8
   cfg.can.id_hex  = '00000000'
   cfg.can.nbrp    = 2;  cfg.can.ntseg1 = 59; cfg.can.ntseg2 = 20; cfg.can.nsjw = 20
   cfg.can.dbrp    = 2;  cfg.can.dtseg1 = 15; cfg.can.dtseg2 = 4;  cfg.can.dsjw = 4
-  cfg.can.fd_mode = 1;  cfg.can.brs    = 1
+  cfg.can.fd_mode = 1;  cfg.can.brs    = 1;  cfg.can.listen_only = 0
   cfg.usb.usbmode = 0
   cfg.logging.ch1 = { enabled: 0, logging_id: 0, target: 0 }
   cfg.logging.ch2 = { enabled: 0, logging_id: 0, target: 0 }
@@ -1238,12 +1500,83 @@ async function confirmBootloader() {
   }
 }
 
+// ── Radxa API ──────────────────────────────────────────────────────────────────
+async function fetchRadxa() {
+  try {
+    const d = (await axios.get(`${MCU}/api/radxa`)).data
+    radxa.alive       = d.alive       ?? false
+    radxa.heartbeat   = d.heartbeat   ?? 0
+    radxa.status      = d.status      ?? 0
+    radxa.version     = d.version     ?? ''
+    radxa.uptime      = d.uptime      ?? 0
+    radxa.wifi_status = d.wifi_status ?? 0
+    radxa.wifi_ip     = d.wifi_ip     ?? ''
+    radxa.wifi_rssi   = d.wifi_rssi   ?? 0
+    radxa.wifi_enable = d.wifi_enable ?? false
+    radxa.data_enable = d.data_enable ?? false
+    radxa.dest_ip     = d.dest_ip     ?? ''
+    radxa.dest_port   = d.dest_port   ?? 47808
+    radxa.pkts_fwd    = d.pkts_fwd    ?? 0
+    radxa.pkts_drop   = d.pkts_drop   ?? 0
+    radxaEdit.wifiEnable = radxa.wifi_enable
+    radxaEdit.dataEnable = radxa.data_enable
+    if (!radxaEdit.destIp)   radxaEdit.destIp   = radxa.dest_ip
+    if (!radxaEdit.destPort) radxaEdit.destPort = radxa.dest_port
+  } catch (_) {}
+}
+
+async function radxaSendWifiEnable() {
+  try {
+    await axios.post(`${MCU}/api/radxa/wifi`, { enable: radxaEdit.wifiEnable })
+  } catch (_) {}
+}
+
+async function radxaWifiConnect() {
+  radxaEdit.wifiResult = ''
+  try {
+    await axios.post(`${MCU}/api/radxa/wifi`,
+      { enable: true, ssid: radxaEdit.ssid, password: radxaEdit.password })
+    radxaEdit.wifiOk = true
+    radxaEdit.wifiResult = 'Command sent — connecting…'
+    radxaEdit.wifiEnable = true
+  } catch (_) {
+    radxaEdit.wifiOk = false
+    radxaEdit.wifiResult = 'Failed to send command'
+  }
+}
+
+async function radxaApplyData() {
+  radxaEdit.dataResult = ''
+  try {
+    await axios.post(`${MCU}/api/radxa/data`, {
+      enable:    radxaEdit.dataEnable,
+      dest_ip:   radxaEdit.destIp,
+      dest_port: radxaEdit.destPort,
+    })
+    radxaEdit.dataOk = true; radxaEdit.dataResult = 'Applied'
+    setTimeout(() => { radxaEdit.dataResult = '' }, 2000)
+  } catch (_) {
+    radxaEdit.dataOk = false; radxaEdit.dataResult = 'Failed'
+  }
+}
+
+async function doRadxaReboot() {
+  radxaRebootState.value = 'sending'
+  try {
+    await axios.post(`${MCU}/api/radxa/reboot`, {}, { timeout: 3000 })
+    radxaRebootState.value = 'done'
+  } catch (e) {
+    radxaRebootState.value = e.response ? 'error' : 'done'
+  }
+}
+
 onMounted(() => {
-  fetchTelemetry(); fetchDTC(); fetchNodes(); fetchSystemInfo(); fetchConfig()
+  fetchTelemetry(); fetchDTC(); fetchNodes(); fetchSystemInfo(); fetchConfig(); fetchRadxa()
   setInterval(fetchTelemetry,  200)
   setInterval(fetchDTC,       2000)
   setInterval(fetchNodes,     5000)
   setInterval(fetchSystemInfo,5000)
+  setInterval(fetchRadxa,     3000)
 })
 
 // ── Components ────────────────────────────────────────────────────────────────
@@ -1859,4 +2192,34 @@ code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: va
 .target-name { font-size: 12px; font-weight: 600; }
 .target-soon { font-size: 10px; color: var(--muted); }
 .popup-actions { display: flex; gap: 10px; margin-top: 24px; justify-content: flex-end; }
+
+/* ── Radxa page ──────────────────────────────────────────────────────────── */
+.radxa-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 900px) { .radxa-top-grid { grid-template-columns: 1fr; } }
+
+.wifi-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.wifi-dot-connected  { background: var(--success); box-shadow: 0 0 6px rgba(16,185,129,0.6); }
+.wifi-dot-connecting { background: var(--warning); animation: pulse-warn 1.2s infinite; }
+.wifi-dot-down       { background: var(--muted); }
+@keyframes pulse-warn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
+}
+
+.radxa-stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.radxa-stat {
+  background: var(--dim); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 24px;
+  min-width: 130px; text-align: center;
+}
+.radxa-stat-warn { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
+.radxa-stat-val  { font-size: 26px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.radxa-stat-warn .radxa-stat-val { color: #f87171; }
+.radxa-stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); margin-top: 4px; }
 </style>
