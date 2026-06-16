@@ -381,11 +381,51 @@ function formatUptime(s) {
   if (m) return `${m}m ${sec}s`
   return `${sec}s`
 }
-function send(obj)    { console.log('J1939 TX:', obj) }
-function sendThrottle(value = throttle.value) {
-  if (value !== undefined) {
-    throttle.value = value
+// ── J1939 TX helpers ──────────────────────────────────────────────────────────
+// All frames sent to FDCAN1 (channel 0) via /api/send/can.
+// SA = 0xFE (null/tester address), Priority = 3.
+
+function j1939CanId(pf, ps, da = 0xFF, sa = 0xFE, priority = 3) {
+  // PDU1 (PF < 0xF0): PS = destination address
+  // PDU2 (PF >= 0xF0): PS = group extension (broadcast)
+  const ps_ = (pf >= 0xF0) ? ps : (da & 0xFF)
+  const id = ((priority & 0x7) << 26) | (pf << 16) | (ps_ << 8) | (sa & 0xFF)
+  return '0x' + (id >>> 0).toString(16).toUpperCase().padStart(8, '0')
+}
+
+async function j1939Send(canId, dataHex) {
+  try {
+    await fetch(`${MCU}/api/send/can`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: canId, data: dataHex, fd: false, brs: false })
+    })
+  } catch (e) { console.error('CAN TX error:', e) }
+}
+
+// send-control event: {type:'control', engine:'start'|'stop'}
+// send-throttle event: throttle value 0-100
+async function send(obj) {
+  if (obj.engine === 'start' || obj.engine === 'stop') {
+    // ProprietaryA (PGN 0xEF00) addressed to engine ECU (DA=0x00)
+    // Byte 0: 0x01 = start, 0x00 = stop  (vendor-defined)
+    const canId = j1939CanId(0xEF, 0x00, /*da=*/0x00)
+    const cmd   = obj.engine === 'start' ? '01' : '00'
+    await j1939Send(canId, cmd + 'FFFFFFFFFFFFFF')
+  } else if (obj.throttle !== undefined) {
+    // TSC1 (PGN 0x0000) torque control — addressed to engine ECU (DA=0x00)
+    // Byte 0: 0x0F = torque override, highest priority
+    // Bytes 1-2: 0xFFFF = speed not controlled
+    // Byte 3: requested torque = throttle% + 125 (offset -125%, 1%/bit)
+    const canId  = j1939CanId(0x00, 0x00, /*da=*/0x00)
+    const torque = Math.min(250, Math.max(0, Math.round(Number(obj.throttle)) + 125))
+    const t = torque.toString(16).padStart(2, '0').toUpperCase()
+    await j1939Send(canId, '0FFFFF' + t + 'FFFFFFFF')
   }
+}
+
+function sendThrottle(value = throttle.value) {
+  if (value !== undefined) throttle.value = value
   send({ type: 'control', throttle: throttle.value })
 }
 
