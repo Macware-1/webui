@@ -34,17 +34,16 @@
     <main class="main">
       <TopBar :page="page" :system="system" />
 
-      <GaugesPage v-if="page === 'Gauges'" :smooth="smooth" :telemetry="telemetry" />
-      <DiagnosticsPage v-else-if="page === 'Diagnostics'" :dtc="dtc" :severityClass="severityClass" />
+      <GaugesPage v-if="page === 'Gauges'" :ecus="ecus" />
+      <DiagnosticsPage v-else-if="page === 'Diagnostics'"
+        :dtc="dtc" :dtc2="dtc2" :dtcMeta="dtcMeta" :severityClass="severityClass"
+        @clear-dm11="sendDmCmd('dm11')"
+        @clear-dm3="sendDmCmd('dm3')" />
       <ControlsPage
         v-else-if="page === 'Controls'"
-        :throttle="throttle"
-        :tx="tx"
-        @update:throttle="val => throttle.value = val"
-        @update:tx="val => Object.assign(tx, val)"
         @send-throttle="sendThrottle"
         @send-control="send"
-        @send-frame="sendCanFrame"
+        @send-frame="sendJ1939Frame"
       />
       <NodesPage v-else-if="page === 'Nodes'" :nodes="nodes" />
       <SystemInfoPage v-else-if="page === 'System Info'" :system="system" :cfg="cfg" :formatUptime="formatUptime" />
@@ -59,7 +58,7 @@
         @apply-nom-preset="applyNomPreset"
         @apply-data-preset="applyDataPreset"
       />
-      <CANReplayPage v-else-if="page === 'CAN Replay'" :inject="inject" :injectDlc="injectDlc" :system="system" @send-can-frame="sendCanFrame" />
+      <CANReplayPage v-else-if="page === 'CAN Injection'" :inject="inject" :injectDlc="injectDlc" :system="system" @send-can-frame="sendCanFrame" />
       <FilteringPage v-else-if="page === 'Filtering'" :cfg="cfg" :RULE_SLOTS="RULE_SLOTS" :activeRuleCount="activeRuleCount" />
       <RadxaPage
         v-else-if="page === 'Wifi'"
@@ -118,30 +117,34 @@ import Button from "./components/ui/Button.vue"
 // Empty string → relative URLs; page is served by the MCU itself so all
 // API calls go to the same host regardless of which interface (ETH or USB) is used.
 const MCU   = ""
-const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Replay':'▶', Filtering:'⚙', Wifi:'📶' }
+const ICONS = { Gauges:'📊', Diagnostics:'🚨', Controls:'🎛', Nodes:'🔌', 'System Info':'🖧', Logging:'📋', 'CAN Bus':'📡', 'CAN Injection':'▶', Filtering:'⚙', Wifi:'📶' }
 const RULE_SLOTS = ['r0','r1','r2','r3','r4','r5','r6','r7']
 
 // ── Navigation ────────────────────────────────────────────────────────────────
-const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Replay", "Filtering", "Wifi"]
+const pages = ["Gauges", "Diagnostics", "Controls", "Nodes", "System Info", "Logging", "CAN Bus", "CAN Injection", "Filtering", "Wifi"]
 const page  = ref("Gauges")
 const sidebarCollapsed = ref(false)
 
 // ── Reactive state ────────────────────────────────────────────────────────────
-const telemetry = reactive({
-  engine_speed: 0, vehicle_speed: 0, fuel_level: 0,
-  engine_load: 0,  coolant_temp: 0,  battery_voltage: 0, throttle_pct: 0,
-  status: { engine_running: false, brake: false, pto: false, cruise: false }
-})
-const smooth = reactive({
-  engine_speed: 0, vehicle_speed: 0, fuel_level: 0,
-  engine_load: 0,  coolant_temp: 0,  battery_voltage: 0
-})
+function makeEcu() {
+  return {
+    sa: '0xFF',
+    engine_speed: 0, vehicle_speed: 0, fuel_level: 0,
+    engine_load: 0,  coolant_temp: 0,  battery_voltage: 0, throttle_pct: 0,
+    status: { engine_running: false, brake: false, pto: false, cruise: false },
+    smooth: { engine_speed: 0, vehicle_speed: 0, fuel_level: 0,
+              engine_load: 0,  coolant_temp: 0,  battery_voltage: 0 },
+  }
+}
+const ecus = reactive([makeEcu(), makeEcu()])
 const system = reactive({
   ip: '—', mac: '—', gateway: '—', phy: '—',
   link_up: false, speed: '—', duplex: '—',
   uptime: 0, heap: null, tasks: null, clock: null
 })
 const dtc      = ref([])
+const dtc2     = ref([])
+const dtcMeta  = ref({ red_stop_lamp: false, amber_warn_lamp: false })
 const nodes    = ref([])
 const throttle = ref(0)
 const tx       = reactive({ pgn: '', data: '' })
@@ -172,7 +175,7 @@ const wifiStatusClass = computed(() => {
   return 'wifi-dot-down'
 })
 
-// ── CAN Replay state ──────────────────────────────────────────────────────────
+// ── CAN Injection state ──────────────────────────────────────────────────────────
 const inject = reactive({ id: '0x123', data: '0102030405060708', fd: false, brs: false, sending: false, result: '', ok: false })
 
 const injectDlc = computed(() => {
@@ -362,9 +365,11 @@ function applyDataPreset(dbrp, dtseg1, dtseg2, dsjw) {
 
 // ── Smoothing ─────────────────────────────────────────────────────────────────
 setInterval(() => {
-  for (const k in smooth) {
-    const t = telemetry[k]
-    if (typeof t === 'number') smooth[k] += (t - smooth[k]) * 0.15
+  for (const ecu of ecus) {
+    const sm = ecu.smooth
+    for (const k in sm) {
+      if (typeof ecu[k] === 'number') sm[k] += (ecu[k] - sm[k]) * 0.15
+    }
   }
 }, 50)
 
@@ -427,6 +432,17 @@ async function send(obj) {
 function sendThrottle(value = throttle.value) {
   if (value !== undefined) throttle.value = value
   send({ type: 'control', throttle: throttle.value })
+}
+
+async function sendJ1939Frame({ pgn, data, sa }) {
+  const p    = parseInt(pgn) || 0
+  const pf   = (p >> 8) & 0xFF
+  const ps   = p & 0xFF
+  const saV  = parseInt(sa)  // handles "0x80" and "128"; NaN → falls back below
+  const saB  = Number.isNaN(saV) ? 0xFE : (saV & 0xFF)
+  // PDU1 (PF<0xF0): PS encodes DA; PDU2 (PF>=0xF0): PS is group extension
+  const canId = j1939CanId(pf, ps, ps, saB, 6)
+  await j1939Send(canId, (data || '').replace(/\s/g, ''))
 }
 
 function parseIp(s) {
@@ -695,18 +711,37 @@ function applyDefaults() {
 async function fetchTelemetry() {
   try {
     const d = (await axios.get(`${MCU}/api/telemetry`)).data
-    telemetry.engine_speed    = d.engine_speed    ?? telemetry.engine_speed
-    telemetry.vehicle_speed   = d.vehicle_speed   ?? telemetry.vehicle_speed
-    telemetry.fuel_level      = d.fuel_level      ?? telemetry.fuel_level
-    telemetry.engine_load     = d.engine_load     ?? telemetry.engine_load
-    telemetry.coolant_temp    = d.coolant_temp    ?? telemetry.coolant_temp
-    telemetry.battery_voltage = d.battery_voltage ?? telemetry.battery_voltage
-    telemetry.throttle_pct    = d.throttle_pct    ?? telemetry.throttle_pct
-    if (d.status) Object.assign(telemetry.status, d.status)
+    if (!Array.isArray(d.ecus)) return
+    d.ecus.forEach((e, i) => {
+      if (i >= ecus.length) return
+      const ecu = ecus[i]
+      ecu.sa              = e.sa              ?? ecu.sa
+      ecu.engine_speed    = e.engine_speed    ?? ecu.engine_speed
+      ecu.vehicle_speed   = e.vehicle_speed   ?? ecu.vehicle_speed
+      ecu.fuel_level      = e.fuel_level      ?? ecu.fuel_level
+      ecu.engine_load     = e.engine_load     ?? ecu.engine_load
+      ecu.coolant_temp    = e.coolant_temp    ?? ecu.coolant_temp
+      ecu.battery_voltage = e.battery_voltage ?? ecu.battery_voltage
+      ecu.throttle_pct    = e.throttle_pct    ?? ecu.throttle_pct
+      if (e.status) Object.assign(ecu.status, e.status)
+    })
   } catch (_) {}
 }
 async function fetchDTC() {
-  try { dtc.value = (await axios.get(`${MCU}/api/dtc`)).data.active ?? [] } catch (_) {}
+  try {
+    const d = (await axios.get(`${MCU}/api/dtc`)).data
+    dtc.value = d.active ?? []
+    dtcMeta.value = { red_stop_lamp: d.red_stop_lamp ?? false, amber_warn_lamp: d.amber_warn_lamp ?? false }
+  } catch (_) {}
+}
+async function fetchDTC2() {
+  try { dtc2.value = (await axios.get(`${MCU}/api/dtc2`)).data.active ?? [] } catch (_) {}
+}
+async function sendDmCmd(cmd) {
+  try {
+    await axios.post(`${MCU}/api/send/dm`, { cmd })
+    setTimeout(() => { fetchDTC(); fetchDTC2() }, 600)
+  } catch (_) {}
 }
 async function fetchNodes() {
   try { nodes.value = (await axios.get(`${MCU}/api/nodes`)).data.nodes ?? [] } catch (_) {}
@@ -813,9 +848,10 @@ function resetRadxaRebootState() {
 }
 
 onMounted(() => {
-  fetchTelemetry(); fetchDTC(); fetchNodes(); fetchSystemInfo(); fetchConfig(); fetchRadxa()
+  fetchTelemetry(); fetchDTC(); fetchDTC2(); fetchNodes(); fetchSystemInfo(); fetchConfig(); fetchRadxa()
   setInterval(fetchTelemetry,  200)
   setInterval(fetchDTC,       2000)
+  setInterval(fetchDTC2,      5000)
   setInterval(fetchNodes,     5000)
   setInterval(fetchSystemInfo,5000)
   setInterval(fetchRadxa,     3000)

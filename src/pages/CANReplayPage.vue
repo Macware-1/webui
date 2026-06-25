@@ -1,7 +1,7 @@
 <template>
   <section class="content-panel">
     <div class="panel-head">
-      <h2 class="panel-title">CAN Replay</h2>
+      <h2 class="panel-title">CAN Injection</h2>
       <span class="count-badge">Inject frames onto CAN bus</span>
     </div>
 

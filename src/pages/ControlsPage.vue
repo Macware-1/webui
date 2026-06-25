@@ -2,6 +2,7 @@
   <section class="content-panel">
     <div class="panel-head"><h2 class="panel-title">Control Panel</h2></div>
     <div class="controls-grid">
+
       <div class="ctrl-card">
         <div class="ctrl-title">Throttle</div>
         <div class="ctrl-bigval">{{ localThrottle }}<span class="ctrl-unit">%</span></div>
@@ -11,42 +12,34 @@
 
       <div class="ctrl-card">
         <div class="ctrl-title">Engine Control</div>
-        <button class="btn btn-success" @click="$emit('send-control',{type:'control',engine:'start'})">▶ Start Engine</button>
-        <button class="btn btn-danger" @click="$emit('send-control',{type:'control',engine:'stop'})">■ Stop Engine</button>
+        <button class="btn btn-success" @click="$emit('send-control', { engine: 'start' })">▶ Start Engine</button>
+        <button class="btn btn-danger"  @click="$emit('send-control', { engine: 'stop'  })">■ Stop Engine</button>
       </div>
 
       <div class="ctrl-card">
         <div class="ctrl-title">Raw J1939 TX</div>
-        <input v-model="localTx.pgn" class="text-input" placeholder="PGN  e.g. 61444" />
-        <input v-model="localTx.data" class="text-input" placeholder="8-byte hex data" />
-        <button class="btn btn-primary" @click="$emit('send-frame')">📡 Send Frame</button>
+        <input v-model="pgn"  class="text-input" placeholder="PGN (decimal, e.g. 61444)" />
+        <input v-model="data" class="text-input" placeholder="8-byte hex (e.g. 0FFFFFFF...)" />
+        <div class="field-row">
+          <label class="field-label">SA</label>
+          <input v-model="sa" class="text-input text-input-sm" placeholder="0xFE (tester)" />
+        </div>
+        <button class="btn btn-primary" @click="$emit('send-frame', { pgn, data, sa })">📡 Send Frame</button>
       </div>
+
     </div>
   </section>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
-const props = defineProps({
-  throttle: Number,
-  tx: Object,
-})
-const emit = defineEmits(['update:throttle', 'update:tx', 'send-throttle', 'send-control', 'send-frame'])
-const localThrottle = ref(props.throttle)
-const localTx = ref({ pgn: props.tx?.pgn || '', data: props.tx?.data || '' })
+import { ref } from 'vue'
 
-watch(() => props.throttle, (value) => { localThrottle.value = value })
-watch(localThrottle, (value) => { emit('update:throttle', value) })
-watch(
-  () => props.tx,
-  (value) => { localTx.value = { pgn: value?.pgn || '', data: value?.data || '' } },
-  { deep: true }
-)
-watch(
-  localTx,
-  (value) => { emit('update:tx', { ...(props.tx || {}), ...value }) },
-  { deep: true }
-)
+defineEmits(['send-throttle', 'send-control', 'send-frame'])
+
+const localThrottle = ref(0)
+const pgn  = ref('')
+const data = ref('')
+const sa   = ref('')
 </script>
 
 <style scoped>
@@ -83,4 +76,18 @@ watch(
   background: var(--primary);
   box-shadow: 0 0 8px rgba(59,130,246,0.5);
 }
+.text-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: monospace;
+  outline: none;
+}
+.text-input:focus { border-color: var(--accent); }
+.text-input-sm { flex: 1; }
+.field-row { display: flex; align-items: center; gap: 8px; }
+.field-label { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 22px; }
 </style>
